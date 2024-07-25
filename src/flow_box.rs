@@ -10,6 +10,7 @@ mod default {
     pub const DIFFUSION_RATE: f64 = 1.;
 }
 
+/// An object that holds a sandbox containing fluid
 pub struct FlowBox {
     width: usize,
     height: usize,
