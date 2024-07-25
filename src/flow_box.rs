@@ -15,7 +15,7 @@ pub struct FlowBox {
     height: usize,
 
     // 2d grid of fluid velocities
-    vector_field: Vec<Vec2>,
+    vec_field: Vec<Vec2>,
     // 2d grid of obstacles in sim
     obstacle_field: Vec<bool>,
 
@@ -30,7 +30,7 @@ impl FlowBox {
         FlowBox {
             width,
             height,
-            vector_field: (0..(width * height))
+            vec_field: (0..(width * height))
                 .into_iter()
                 .map(|_| Vec2::zeroes())
                 .collect(),
@@ -44,7 +44,7 @@ impl FlowBox {
     pub fn set_obstacles(&mut self, obstacles: Vec<bool>) {
         assert_eq!(
             obstacles.len(),
-            self.vector_field.len(),
+            self.vec_field.len(),
             "Obstacle grid provided has incompatible dimensions"
         );
         self.obstacle_field = obstacles;
@@ -54,15 +54,78 @@ impl FlowBox {
 impl FlowBox {
     // Steps simulation forward given dt
     pub fn step(&mut self, dt: f64) {
-        todo!()
+        self.apply_diffusion(dt);
+        self.apply_advection(dt);
+
+        for _ in 0..self.divergence_iters {
+            self.remove_divergence(dt);
+        }
     }
 }
 
 impl FlowBox {
-    fn apply_advection(&mut self, dt: f64) {
-        todo!()
+    fn index_vec_field(&self, index: &Vec2) -> &Vec2 {
+        assert_eq!(
+            index.x.fract(),
+            0.0,
+            "Index provided has a fractional component and cannot be used"
+        );
+        assert_eq!(
+            index.y.fract(),
+            0.0,
+            "Index provided has a fractional component and cannot be used"
+        );
+        &self.vec_field[index.x as usize + index.y as usize * self.width]
     }
+    /// Moving velocities in direction of their velocity
+    fn apply_advection(&mut self, dt: f64) {
+        let mut new_vec_feild: Vec<Vec2> = Vec::with_capacity(self.vec_field.len());
+
+        for i in 0..self.vec_field.len() {
+            let x = i % self.width;
+            let y = i / self.width;
+
+            let current_pos = Vec2::new(x as f64, y as f64);
+            let back_pos = current_pos.sub(&self.vec_field[i].scale(dt));
+            let back_pos_i = back_pos.floor(); // Backward Position Index
+            let frac_diff = back_pos.sub(&back_pos_i); // Fractional Difference
+
+            let z3: Vec2;
+
+            // Checking for bounds
+            let z3 = if 0. <= back_pos_i.x
+                && back_pos_i.x < self.width as f64
+                && 0. <= back_pos_i.y
+                && back_pos_i.y < self.height as f64
+            {
+                let z1 = Vec2::new(back_pos_i.x, back_pos_i.y)
+                    .interpolate(&Vec2::new(back_pos_i.x + 1., back_pos_i.y), frac_diff.x);
+                let z2 = Vec2::new(back_pos_i.x, back_pos_i.y + 1.).interpolate(
+                    &Vec2::new(back_pos_i.x + 1., back_pos_i.y + 1.),
+                    frac_diff.x,
+                );
+
+                z1.interpolate(&z2, frac_diff.y)
+            } else {
+                let mut z3 = new_vec_feild[i].clone();
+                if (x == 0 || x == self.width - 1) {
+                    z3.x *= -1.;
+                }
+                if (y == 0 || y == self.height - 1) {
+                    z3.y *= -1.;
+                }
+                z3
+            };
+
+            new_vec_feild[i] = z3;
+        }
+
+        self.vec_field = new_vec_feild;
+    }
+    /// Spreads out pressure and velocity over area (diffusing)
     fn apply_diffusion(&mut self, dt: f64) {
+        let mut new_vec_field: Vec<Vec2> = Vec::with_capacity(self.vec_field.len());
+
         // Smoothing filter with tuples (dx, dy, weight)
         const GAUSSIAN_FILTER: [(isize, isize, usize); 9] = [
             (1, 1, 1),
@@ -76,7 +139,7 @@ impl FlowBox {
             (0, 0, 4),
         ];
 
-        for i in 0..self.vector_field.len() {
+        for i in 0..self.vec_field.len() {
             let x = i % self.width;
             let y = i / self.width;
 
@@ -87,6 +150,7 @@ impl FlowBox {
                 let sample_x = x as isize + dx;
                 let sample_y = y as isize + dy;
 
+                // Checking whether in bounds
                 if 0 <= sample_x
                     && sample_x < self.width as isize
                     && 0 <= sample_y
@@ -94,21 +158,45 @@ impl FlowBox {
                 {
                     weight_sum += weight;
                     let sample =
-                        &self.vector_field[sample_x as usize + sample_y as usize * self.width];
+                        &self.vec_field[sample_x as usize + sample_y as usize * self.width];
                     sum_x += sample.x * weight as f64;
                     sum_y += sample.y * weight as f64;
                 }
             }
-            let current = &self.vector_field[x + y * self.width];
+
+            let current = &self.vec_field[x + y * self.width];
             let next = Vec2::new(sum_x, sum_y).scale(1. / weight_sum as f64);
             let t = self.diffuse_rate * dt / 2.;
 
             let new = current.interpolate(&next, t);
-            self.vector_field[x + y * self.width] = new;
+            new_vec_field[x + y * self.width] = new;
         }
+
+        self.vec_field = new_vec_field;
     }
+    // Attempts to stop fluids from leaving areas of low pressure
     fn remove_divergence(&mut self, dt: f64) {
-        // Attempts to stop fluid from leaving areas of low pressure
-        todo!()
+        for i in 0..self.vec_field.len() {
+            let x = i % self.width;
+            let y = i / self.width;
+
+            if 0 == x || x == self.width - 1 || 0 == y || y == self.height - 1 {
+                let dot1 = self.vec_field[(x + 1) + (y + 1) * self.width]
+                    .add(&self.vec_field[(x - 1) + (y - 1) * self.width])
+                    .dot(&Vec2::ones());
+                let dot2 = self.vec_field[(x + 1) + (y - 1) * self.width]
+                    .add(&self.vec_field[(x - 1) + (y + 1) * self.width])
+                    .dot(&Vec2::ones().flip_y());
+
+                let grad = self.vec_field[(x) + (y + 1) * self.width]
+                    .sub(&self.vec_field[(x) + (y - 1) * self.width])
+                    .add(&self.vec_field[(x + 1) + (y) * self.width])
+                    .sub(&self.vec_field[(x - 1) + (y) * self.width]);
+
+                let res = grad.add(&Vec2::new(dot1 + dot2, dot1 - dot2));
+
+                self.vec_field[i] = res.scale(dt / self.divergence_iters as f64);
+            }
+        }
     }
 }
