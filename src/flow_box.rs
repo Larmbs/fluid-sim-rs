@@ -57,8 +57,9 @@ impl FlowBox {
 impl FlowBox {
     // Steps simulation forward given dt
     pub fn step(&mut self, dt: f64) {
+        self.vec_field[0].x = 20.;
         self.apply_diffusion(dt);
-        self.apply_advection(dt);
+        //self.apply_advection(dt);
 
         for _ in 0..self.divergence_iters {
             //self.remove_divergence(dt);
@@ -144,6 +145,7 @@ impl FlowBox {
             let mut sum_x = 0.;
             let mut sum_y = 0.;
             let mut weight_sum = 0;
+            
             for (dx, dy, weight) in DIFFUSION_FILTER {
                 let sample_x = x as isize + dx;
                 let sample_y = y as isize + dy;
