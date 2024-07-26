@@ -12,7 +12,7 @@ async fn main() {
     let display_mode = DisplayMode::VelocityBlackWhite;
 
     loop {
-        flow_box.step(1.);
+        flow_box.step(1./30.);
         FlowDisplay::display(&flow_box, &display_mode);
         next_frame().await;
     }

@@ -9,9 +9,7 @@ pub enum DisplayMode {
 }
 
 /// Displays a flow box given a mode
-pub struct FlowDisplay {
-    stretch_grid: bool,
-}
+pub struct FlowDisplay;
 impl FlowDisplay {
     pub fn display(flow_box: &FlowBox, display_mode: &DisplayMode) {
         let grid_width = flow_box.width;
@@ -23,8 +21,8 @@ impl FlowDisplay {
         match display_mode {
             DisplayMode::VelocityBlackWhite => {
                 for i in 0..flow_box.vec_field.len() {
-                    let x = i % flow_box.width;
-                    let y = i / flow_box.height;
+                    let x = i % grid_width;
+                    let y = i / grid_height;
 
                     let mag = flow_box.vec_field[i].mag() as f32;
 
@@ -34,9 +32,9 @@ impl FlowDisplay {
                         block_size,
                         block_size,
                         Color {
-                            r: mag,
-                            g: mag,
-                            b: mag,
+                            r: mag.min(1.0),
+                            g: mag.min(1.0),
+                            b: mag.min(1.0),
                             a: 1.,
                         },
                     )

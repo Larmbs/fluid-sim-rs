@@ -57,7 +57,7 @@ impl FlowBox {
 impl FlowBox {
     // Steps simulation forward given dt
     pub fn step(&mut self, dt: f64) {
-        self.vec_field[0].x = 20.;
+        self.vec_field[self.width / 2 + self.height / 2 * self.width].x = 0.5;
         self.apply_diffusion(dt);
         //self.apply_advection(dt);
 
@@ -128,32 +128,33 @@ impl FlowBox {
     }
     /// Spreads out pressure and velocity over area (diffusing)
     fn apply_diffusion(&mut self, dt: f64) {
-        let mut new_vec_field: Vec<Vec2> = Vec::with_capacity(self.vec_field.len());
+        let mut new_vec_field: Vec<Vec2> = vec![Vec2::zeroes(); self.vec_field.len()];
 
         // Smoothing filter with tuples (dx, dy, weight)
-        const DIFFUSION_FILTER: [(isize, isize, usize); 4] = [
+        const DIFFUSION_FILTER: [(isize, isize, usize); 5] = [
             (0, 1, 1),
             (0, -1, 1),
             (-1, 0, 1),
             (1, 0, 1),
+            (0, 0, 1), // Include the center point
         ];
 
         for i in 0..self.vec_field.len() {
             let x = i % self.width;
             let y = i / self.width;
 
-            let mut sum_x = 0.;
-            let mut sum_y = 0.;
+            let mut sum_x = 0.0;
+            let mut sum_y = 0.0;
             let mut weight_sum = 0;
-            
+
             for (dx, dy, weight) in DIFFUSION_FILTER {
                 let sample_x = x as isize + dx;
                 let sample_y = y as isize + dy;
 
                 // Checking whether in bounds
-                if 0 <= sample_x
+                if sample_x >= 0
                     && sample_x < self.width as isize
-                    && 0 <= sample_y
+                    && sample_y >= 0
                     && sample_y < self.height as isize
                 {
                     weight_sum += weight;
@@ -164,16 +165,21 @@ impl FlowBox {
                 }
             }
 
-            let current = &self.vec_field[x + y * self.width];
-            let next = Vec2::new(sum_x, sum_y).scale(1. / weight_sum as f64);
-            let t = self.diffuse_rate * dt / 2.;
+            if weight_sum > 0 {
+                let current = &self.vec_field[x + y * self.width];
+                let next = Vec2::new(sum_x, sum_y).scale(1.0 / weight_sum as f64);
+                let t = self.diffuse_rate * dt / 2.0;
 
-            let new = current.interpolate(&next, t);
-            new_vec_field.push(new);
+                let new = current.interpolate(&next, t);
+                new_vec_field[i] = new;
+            } else {
+                new_vec_field[i] = self.vec_field[i].clone();
+            }
         }
 
         self.vec_field = new_vec_field;
     }
+
     // Attempts to stop fluids from leaving areas of low pressure
     fn remove_divergence(&mut self, dt: f64) {
         for i in 0..self.vec_field.len() {
