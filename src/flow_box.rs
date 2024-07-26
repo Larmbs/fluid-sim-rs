@@ -12,15 +12,16 @@ mod default {
 
 /// An object that holds a sandbox containing fluid
 pub struct FlowBox {
-    width: usize,
-    height: usize,
+    pub width: usize,
+    pub height: usize,
 
     // 2d grid of fluid velocities
-    vec_field: Vec<Vec2>,
+    pub vec_field: Vec<Vec2>,
     // 2d grid of obstacles in sim
     obstacle_field: Vec<bool>,
 
     /* Some settings for fluid behavior */
+    gravity: f64,
     viscosity: f64,
     apply_border: bool,
     divergence_iters: usize,
@@ -36,6 +37,7 @@ impl FlowBox {
                 .map(|_| Vec2::zeroes())
                 .collect(),
             obstacle_field: vec![],
+            gravity: -9.8,
             viscosity,
             apply_border: default::APPLY_BORDER,
             divergence_iters: default::DIVERGENCE_ITERATIONS,
@@ -59,7 +61,7 @@ impl FlowBox {
         self.apply_advection(dt);
 
         for _ in 0..self.divergence_iters {
-            self.remove_divergence(dt);
+            //self.remove_divergence(dt);
         }
     }
 }
@@ -80,7 +82,7 @@ impl FlowBox {
     }
     /// Moving velocities in direction of their velocity
     fn apply_advection(&mut self, dt: f64) {
-        let mut new_vec_feild: Vec<Vec2> = Vec::with_capacity(self.vec_field.len());
+        let mut new_vec_field: Vec<Vec2> = Vec::with_capacity(self.vec_field.len());
 
         for i in 0..self.vec_field.len() {
             let x = i % self.width;
@@ -108,7 +110,7 @@ impl FlowBox {
 
                 z1.interpolate(&z2, frac_diff.y)
             } else {
-                let mut z3 = new_vec_feild[i].clone();
+                let mut z3 = self.vec_field[i].clone();
                 if (x == 0 || x == self.width - 1) {
                     z3.x *= -1.;
                 }
@@ -118,26 +120,21 @@ impl FlowBox {
                 z3
             };
 
-            new_vec_feild[i] = z3;
+            new_vec_field.push(z3);
         }
 
-        self.vec_field = new_vec_feild;
+        self.vec_field = new_vec_field;
     }
     /// Spreads out pressure and velocity over area (diffusing)
     fn apply_diffusion(&mut self, dt: f64) {
         let mut new_vec_field: Vec<Vec2> = Vec::with_capacity(self.vec_field.len());
 
         // Smoothing filter with tuples (dx, dy, weight)
-        const GAUSSIAN_FILTER: [(isize, isize, usize); 9] = [
-            (1, 1, 1),
-            (1, -1, 1),
-            (-1, 1, 1),
-            (-1, -1, 1),
-            (0, 1, 2),
-            (0, -1, 2),
-            (1, 0, 2),
-            (-1, 0, 2),
-            (0, 0, 4),
+        const DIFFUSION_FILTER: [(isize, isize, usize); 4] = [
+            (0, 1, 1),
+            (0, -1, 1),
+            (-1, 0, 1),
+            (1, 0, 1),
         ];
 
         for i in 0..self.vec_field.len() {
@@ -147,7 +144,7 @@ impl FlowBox {
             let mut sum_x = 0.;
             let mut sum_y = 0.;
             let mut weight_sum = 0;
-            for (dx, dy, weight) in GAUSSIAN_FILTER {
+            for (dx, dy, weight) in DIFFUSION_FILTER {
                 let sample_x = x as isize + dx;
                 let sample_y = y as isize + dy;
 
@@ -155,7 +152,7 @@ impl FlowBox {
                 if 0 <= sample_x
                     && sample_x < self.width as isize
                     && 0 <= sample_y
-                    && sample_y <= self.height as isize
+                    && sample_y < self.height as isize
                 {
                     weight_sum += weight;
                     let sample =
@@ -170,7 +167,7 @@ impl FlowBox {
             let t = self.diffuse_rate * dt / 2.;
 
             let new = current.interpolate(&next, t);
-            new_vec_field[x + y * self.width] = new;
+            new_vec_field.push(new);
         }
 
         self.vec_field = new_vec_field;
@@ -181,7 +178,7 @@ impl FlowBox {
             let x = i % self.width;
             let y = i / self.width;
 
-            if 0 == x || x == self.width - 1 || 0 == y || y == self.height - 1 {
+            if 1 <= x && x < self.width - 1 && 1 <= y && y < self.height - 1 {
                 let dot1 = self.vec_field[(x + 1) + (y + 1) * self.width]
                     .add(&self.vec_field[(x - 1) + (y - 1) * self.width])
                     .dot(&Vec2::ones());
@@ -198,6 +195,11 @@ impl FlowBox {
 
                 self.vec_field[i] = res.scale(dt / self.divergence_iters as f64);
             }
+        }
+    }
+    fn add_gravity(&mut self, dt: f64) {
+        for i in 0..self.vec_field.len() {
+            self.vec_field[i].y = self.vec_field[i].y + dt * self.gravity
         }
     }
 }

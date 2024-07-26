@@ -70,4 +70,10 @@ impl Vec2 {
             y: -self.y,
         }
     }
+    pub fn mag(&self) -> f64 {
+        (self.x.powi(2) + self.y.powi(2)).sqrt()
+    }
+    pub fn mag_squared(&self) -> f64 {
+        self.x.powi(2) + self.y.powi(2)
+    }
 }
