@@ -7,13 +7,13 @@ use macroquad::prelude::*;
 
 #[macroquad::main("Fluid Sim")]
 async fn main() {
-    let mut flow_box = FlowBox::init(100, 50, 0.5);
+    let mut flow_box = FlowBox::init(100, 50);
 
-    let display_mode = DisplayMode::VelocityBlackWhite;
+    let flow_display = FlowDisplay::init(DisplayMode::VelocityBlackWhite);
 
     loop {
-        flow_box.step(1./30.);
-        FlowDisplay::display(&flow_box, &display_mode);
+        flow_box.step(1. / 30.);
+        flow_display.display(&flow_box);
         next_frame().await;
     }
 }

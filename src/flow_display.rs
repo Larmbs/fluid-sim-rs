@@ -9,35 +9,38 @@ pub enum DisplayMode {
 }
 
 /// Displays a flow box given a mode
-pub struct FlowDisplay;
+pub struct FlowDisplay {
+    mode: DisplayMode,
+}
 impl FlowDisplay {
-    pub fn display(flow_box: &FlowBox, display_mode: &DisplayMode) {
-        let grid_width = flow_box.width;
-        let grid_height = flow_box.height;
+    pub fn init(mode: DisplayMode) -> Self {
+        Self { mode }
+    }
+    pub fn display(&self, flow_box: &FlowBox) {
+        let dim = flow_box.dim;
 
-        let block_size =
-            (screen_width() / grid_width as f32).min(screen_height() / grid_height as f32);
+        let block_size = (screen_width() / dim.0 as f32).min(screen_height() / dim.1 as f32);
 
-        match display_mode {
-            DisplayMode::VelocityBlackWhite => {
-                for i in 0..flow_box.vec_field.len() {
-                    let x = i % grid_width;
-                    let y = i / grid_height;
-
-                    let mag = flow_box.vec_field[i].mag() as f32;
-
-                    draw_rectangle(
-                        x as f32 * block_size,
-                        y as f32 * block_size,
-                        block_size,
-                        block_size,
-                        Color {
-                            r: mag.min(1.0),
-                            g: mag.min(1.0),
-                            b: mag.min(1.0),
-                            a: 1.,
-                        },
-                    )
+        for x in 0..dim.0 {
+            for y in 0..dim.1 {
+                match self.mode {
+                    DisplayMode::VelocityBlackWhite => {
+                        let mag =
+                            flow_box.density[FlowBox::index(x, y, &dim)].clamp(0.0, 1.0) as f32;
+                        let color = Color {
+                            r: mag,
+                            g: mag,
+                            b: mag,
+                            a: 1.0,
+                        };
+                        draw_rectangle(
+                            x as f32 * block_size,
+                            y as f32 * block_size,
+                            block_size,
+                            block_size,
+                            color,
+                        )
+                    }
                 }
             }
         }

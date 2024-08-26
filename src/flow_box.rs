@@ -1,213 +1,333 @@
 //! Defines fluid simulation logic
-#![allow(unused)]
-
-use super::vec2::Vec2;
-
-/// Module defines private defaults for values
-mod default {
-    pub const APPLY_BORDER: bool = true;
-    pub const DIVERGENCE_ITERATIONS: usize = 50;
-    pub const DIFFUSION_RATE: f64 = 1.;
-}
+//! https://www.mikeash.com/pyblog/fluid-simulation-for-dummies.html
 
 /// An object that holds a sandbox containing fluid
 pub struct FlowBox {
-    pub width: usize,
-    pub height: usize,
+    pub dim: (usize, usize),
 
-    // 2d grid of fluid velocities
-    pub vec_field: Vec<Vec2>,
-    // 2d grid of obstacles in sim
-    obstacle_field: Vec<bool>,
+    vel_x: Vec<f64>,
+    vel_x0: Vec<f64>,
+    vel_y: Vec<f64>,
+    vel_y0: Vec<f64>,
 
-    /* Some settings for fluid behavior */
-    gravity: f64,
-    viscosity: f64,
-    apply_border: bool,
-    divergence_iters: usize,
-    diffuse_rate: f64,
+    visc: f64,
+    diff: f64,
+
+    diffuse_iters: usize,
+    project_iters: usize,
+
+    density0: Vec<f64>,
+    pub density: Vec<f64>,
+
+    iter: i128,
 }
 impl FlowBox {
-    pub fn init(width: usize, height: usize, viscosity: f64) -> FlowBox {
+    pub fn init(width: usize, height: usize) -> FlowBox {
         FlowBox {
-            width,
-            height,
-            vec_field: (0..(width * height))
-                .into_iter()
-                .map(|_| Vec2::zeroes())
-                .collect(),
-            obstacle_field: vec![],
-            gravity: -9.8,
-            viscosity,
-            apply_border: default::APPLY_BORDER,
-            divergence_iters: default::DIVERGENCE_ITERATIONS,
-            diffuse_rate: default::DIFFUSION_RATE,
+            dim: (width, height),
+            vel_x: vec![0.0; width * height],
+            vel_x0: vec![0.0; width * height],
+            vel_y: vec![0.0; width * height],
+            vel_y0: vec![0.0; width * height],
+            density0: vec![0.0; width * height],
+            density: vec![0.0; width * height],
+            visc: 600.0,
+            diff: 0.005,
+            diffuse_iters: 1,
+            project_iters: 2,
+            iter: 0,
         }
     }
-    pub fn set_obstacles(&mut self, obstacles: Vec<bool>) {
-        assert_eq!(
-            obstacles.len(),
-            self.vec_field.len(),
-            "Obstacle grid provided has incompatible dimensions"
-        );
-        self.obstacle_field = obstacles;
+    pub fn add_fluid_density(&mut self, x: usize, y: usize, amount: f64) {
+        self.density0[Self::index(x, y, &self.dim)] += amount;
+        self.density0[Self::index(x + 1, y, &self.dim)] += amount;
+        self.density0[Self::index(x, y + 1, &self.dim)] += amount;
+        self.density0[Self::index(x + 1, y + 1, &self.dim)] += amount;
+    }
+    pub fn add_fluid_velocity(&mut self, x: usize, y: usize, vx: f64, vy: f64) {
+        self.vel_x0[Self::index(x, y, &self.dim)] += vx;
+        self.vel_x0[Self::index(x + 1, y, &self.dim)] += vx;
+        self.vel_x0[Self::index(x, y + 1, &self.dim)] += vx;
+        self.vel_x0[Self::index(x + 1, y + 1, &self.dim)] += vx;
+
+        self.vel_y0[Self::index(x, y, &self.dim)] += vy;
+        self.vel_y0[Self::index(x + 1, y, &self.dim)] += vy;
+        self.vel_y0[Self::index(x, y + 1, &self.dim)] += vy;
+        self.vel_y0[Self::index(x + 1, y + 1, &self.dim)] += vy;
+    }
+    pub fn add_fluid_velocity_angle_mag(&mut self, x: usize, y: usize, angle: f64, mag: f64) {
+        let vx = angle.cos() * mag;
+        let vy = angle.sin() * mag;
+        self.add_fluid_velocity(x, y, vx, vy);
     }
 }
 
 impl FlowBox {
     // Steps simulation forward given dt
     pub fn step(&mut self, dt: f64) {
-        self.vec_field[self.width / 2 + self.height / 2 * self.width].x = 0.5;
-        self.apply_diffusion(dt);
-        //self.apply_advection(dt);
+        let center_x: usize = self.dim.0 / 2;
+        let center_y: usize = self.dim.1 / 2;
+        self.iter += 1;
+        self.add_fluid_velocity_angle_mag(center_x, center_y, ((self.iter as f64) * dt) / 16., 20.0);
+        self.add_fluid_density(center_x + 1, center_y + 4, 0.1);
 
-        for _ in 0..self.divergence_iters {
-            //self.remove_divergence(dt);
-        }
+        Self::diffuse(
+            1,
+            &mut self.vel_x0,
+            &self.vel_x,
+            self.visc,
+            dt,
+            self.diffuse_iters,
+            &self.dim,
+        );
+        Self::diffuse(
+            2,
+            &mut self.vel_y0,
+            &self.vel_y,
+            self.visc,
+            dt,
+            self.diffuse_iters,
+            &self.dim,
+        );
+
+        Self::project(
+            &mut self.vel_x0,
+            &mut self.vel_y0,
+            &mut self.vel_x,
+            &mut self.vel_y,
+            self.project_iters,
+            &self.dim,
+        );
+
+        Self::advect(
+            1,
+            &mut self.vel_x,
+            &self.vel_x0,
+            &self.vel_x0,
+            &self.vel_y0,
+            dt,
+            &self.dim,
+        );
+        Self::advect(
+            2,
+            &mut self.vel_y,
+            &self.vel_y0,
+            &self.vel_x0,
+            &self.vel_y0,
+            dt,
+            &self.dim,
+        );
+
+        Self::project(
+            &mut self.vel_x,
+            &mut self.vel_y,
+            &mut self.vel_x0,
+            &mut self.vel_y0,
+            self.project_iters,
+            &self.dim,
+        );
+
+        Self::diffuse(
+            0,
+            &mut self.density0,
+            &self.density,
+            self.diff,
+            dt,
+            self.diffuse_iters,
+            &self.dim,
+        );
+        Self::advect(
+            0,
+            &mut self.density,
+            &self.density0,
+            &self.vel_x,
+            &self.vel_y,
+            dt,
+            &self.dim,
+        );
     }
 }
 
 impl FlowBox {
-    fn index_vec_field(&self, index: &Vec2) -> &Vec2 {
-        assert_eq!(
-            index.x.fract(),
-            0.0,
-            "Index provided has a fractional component and cannot be used"
-        );
-        assert_eq!(
-            index.y.fract(),
-            0.0,
-            "Index provided has a fractional component and cannot be used"
-        );
-        &self.vec_field[index.x as usize + index.y as usize * self.width]
-    }
-    /// Moving velocities in direction of their velocity
-    fn apply_advection(&mut self, dt: f64) {
-        let mut new_vec_field: Vec<Vec2> = Vec::with_capacity(self.vec_field.len());
-
-        for i in 0..self.vec_field.len() {
-            let x = i % self.width;
-            let y = i / self.width;
-
-            let current_pos = Vec2::new(x as f64, y as f64);
-            let back_pos = current_pos.sub(&self.vec_field[i].scale(dt));
-            let back_pos_i = back_pos.floor(); // Backward Position Index
-            let frac_diff = back_pos.sub(&back_pos_i); // Fractional Difference
-
-            let z3: Vec2;
-
-            // Checking for bounds
-            let z3 = if 0. <= back_pos_i.x
-                && back_pos_i.x < self.width as f64
-                && 0. <= back_pos_i.y
-                && back_pos_i.y < self.height as f64
-            {
-                let z1 = Vec2::new(back_pos_i.x, back_pos_i.y)
-                    .interpolate(&Vec2::new(back_pos_i.x + 1., back_pos_i.y), frac_diff.x);
-                let z2 = Vec2::new(back_pos_i.x, back_pos_i.y + 1.).interpolate(
-                    &Vec2::new(back_pos_i.x + 1., back_pos_i.y + 1.),
-                    frac_diff.x,
-                );
-
-                z1.interpolate(&z2, frac_diff.y)
+    fn set_bound(bound: usize, values: &mut Vec<f64>, dim: &(usize, usize)) {
+        // Deals with the top and bottom boundaries
+        for x in 1..dim.0 - 1 {
+            values[Self::index(x, 0, dim)] = if bound == 1 {
+                -values[Self::index(x, 1, dim)]
             } else {
-                let mut z3 = self.vec_field[i].clone();
-                if (x == 0 || x == self.width - 1) {
-                    z3.x *= -1.;
-                }
-                if (y == 0 || y == self.height - 1) {
-                    z3.y *= -1.;
-                }
-                z3
+                values[Self::index(x, 1, dim)]
             };
-
-            new_vec_field.push(z3);
+            values[Self::index(x, dim.1 - 1, dim)] = if bound == 1 {
+                -values[Self::index(x, dim.1 - 2, dim)]
+            } else {
+                values[Self::index(x, dim.1 - 2, dim)]
+            };
         }
 
-        self.vec_field = new_vec_field;
+        // Deals with the side boundaries
+        for y in 1..dim.1 - 1 {
+            values[Self::index(0, y, dim)] = if bound == 2 {
+                -values[Self::index(1, y, dim)]
+            } else {
+                values[Self::index(1, y, dim)]
+            };
+            values[Self::index(dim.0 - 1, y, dim)] = if bound == 2 {
+                -values[Self::index(dim.0 - 2, y, dim)]
+            } else {
+                values[Self::index(dim.0 - 2, y, dim)]
+            };
+        }
+
+        values[Self::index(0, 0, dim)] =
+            0.5 * (values[Self::index(1, 0, dim)] + values[Self::index(0, 1, dim)]);
+
+        values[Self::index(0, dim.1 - 1, dim)] =
+            0.5 * (values[Self::index(1, dim.1 - 1, dim)] + values[Self::index(0, dim.1 - 2, dim)]);
+
+        values[Self::index(dim.0 - 1, 0, dim)] =
+            0.5 * (values[Self::index(dim.0 - 2, 0, dim)] + values[Self::index(dim.0 - 1, 1, dim)]);
+
+        values[Self::index(dim.0 - 1, dim.1 - 1, dim)] = 0.5
+            * (values[Self::index(dim.0 - 2, dim.1 - 1, dim)]
+                + values[Self::index(dim.0 - 1, dim.1 - 2, dim)]);
     }
-    /// Spreads out pressure and velocity over area (diffusing)
-    fn apply_diffusion(&mut self, dt: f64) {
-        let mut new_vec_field: Vec<Vec2> = vec![Vec2::zeroes(); self.vec_field.len()];
 
-        // Smoothing filter with tuples (dx, dy, weight)
-        const DIFFUSION_FILTER: [(isize, isize, usize); 5] = [
-            (0, 1, 1),
-            (0, -1, 1),
-            (-1, 0, 1),
-            (1, 0, 1),
-            (0, 0, 1), // Include the center point
-        ];
+    fn lin_solve(
+        b: usize,
+        x: &mut Vec<f64>,
+        x0: &Vec<f64>,
+        a: f64,
+        c: f64,
+        iter: usize,
+        dim: &(usize, usize),
+    ) {
+        let c_recip = 1.0 / c;
 
-        for i in 0..self.vec_field.len() {
-            let x = i % self.width;
-            let y = i / self.width;
-
-            let mut sum_x = 0.0;
-            let mut sum_y = 0.0;
-            let mut weight_sum = 0;
-
-            for (dx, dy, weight) in DIFFUSION_FILTER {
-                let sample_x = x as isize + dx;
-                let sample_y = y as isize + dy;
-
-                // Checking whether in bounds
-                if sample_x >= 0
-                    && sample_x < self.width as isize
-                    && sample_y >= 0
-                    && sample_y < self.height as isize
-                {
-                    weight_sum += weight;
-                    let sample =
-                        &self.vec_field[sample_x as usize + sample_y as usize * self.width];
-                    sum_x += sample.x * weight as f64;
-                    sum_y += sample.y * weight as f64;
+        for _ in 0..iter {
+            for j in 1..dim.1 - 1 {
+                for i in 1..dim.0 - 1 {
+                    x[Self::index(i, j, dim)] = (x0[Self::index(i, j, dim)]
+                        + a * (x[Self::index(i + 1, j, dim)]
+                            + x[Self::index(i - 1, j, dim)]
+                            + x[Self::index(i, j + 1, dim)]
+                            + x[Self::index(i, j - 1, dim)]))
+                        * c_recip;
                 }
             }
+            Self::set_bound(b, x, dim);
+        }
+    }
 
-            if weight_sum > 0 {
-                let current = &self.vec_field[x + y * self.width];
-                let next = Vec2::new(sum_x, sum_y).scale(1.0 / weight_sum as f64);
-                let t = self.diffuse_rate * dt / 2.0;
+    fn diffuse(
+        b: usize,
+        x: &mut Vec<f64>,
+        x0: &Vec<f64>,
+        diff: f64,
+        dt: f64,
+        iter: usize,
+        dim: &(usize, usize),
+    ) {
+        let a = dt * diff * (dim.0 - 2) as f64 * (dim.1 - 2) as f64;
+        Self::lin_solve(b, x, x0, a, 1.0 + 4.0 * a, iter, dim);
+    }
 
-                let new = current.interpolate(&next, t);
-                new_vec_field[i] = new;
-            } else {
-                new_vec_field[i] = self.vec_field[i].clone();
+    fn project(
+        veloc_x: &mut Vec<f64>,
+        veloc_y: &mut Vec<f64>,
+        p: &mut Vec<f64>,
+        div: &mut Vec<f64>,
+        iter: usize,
+        dim: &(usize, usize),
+    ) {
+        for j in 1..dim.1 - 1 {
+            for i in 1..dim.0 - 1 {
+                div[Self::index(i, j, dim)] = -0.5
+                    * (veloc_x[Self::index(i + 1, j, dim)] - veloc_x[Self::index(i - 1, j, dim)]
+                        + veloc_y[Self::index(i, j + 1, dim)]
+                        - veloc_y[Self::index(i, j - 1, dim)])
+                    / dim.0 as f64;
+                p[Self::index(i, j, dim)] = 0.0;
             }
         }
 
-        self.vec_field = new_vec_field;
-    }
+        Self::set_bound(0, div, dim);
+        Self::set_bound(0, p, dim);
+        Self::lin_solve(0, p, div, 1.0, 6.0, iter, dim);
 
-    // Attempts to stop fluids from leaving areas of low pressure
-    fn remove_divergence(&mut self, dt: f64) {
-        for i in 0..self.vec_field.len() {
-            let x = i % self.width;
-            let y = i / self.width;
-
-            if 1 <= x && x < self.width - 1 && 1 <= y && y < self.height - 1 {
-                let dot1 = self.vec_field[(x + 1) + (y + 1) * self.width]
-                    .add(&self.vec_field[(x - 1) + (y - 1) * self.width])
-                    .dot(&Vec2::ones());
-                let dot2 = self.vec_field[(x + 1) + (y - 1) * self.width]
-                    .add(&self.vec_field[(x - 1) + (y + 1) * self.width])
-                    .dot(&Vec2::ones().flip_y());
-
-                let grad = self.vec_field[(x) + (y + 1) * self.width]
-                    .sub(&self.vec_field[(x) + (y - 1) * self.width])
-                    .add(&self.vec_field[(x + 1) + (y) * self.width])
-                    .sub(&self.vec_field[(x - 1) + (y) * self.width]);
-
-                let res = grad.add(&Vec2::new(dot1 + dot2, dot1 - dot2));
-
-                self.vec_field[i] = res.scale(dt / self.divergence_iters as f64);
+        for j in 1..dim.1 - 1 {
+            for i in 1..dim.0 - 1 {
+                veloc_x[Self::index(i, j, dim)] -=
+                    0.5 * (p[Self::index(i + 1, j, dim)] - p[Self::index(i - 1, j, dim)]) as f64;
+                veloc_y[Self::index(i, j, dim)] -=
+                    0.5 * (p[Self::index(i, j + 1, dim)] - p[Self::index(i, j - 1, dim)]) as f64;
             }
         }
+
+        Self::set_bound(1, veloc_x, dim);
+        Self::set_bound(2, veloc_y, dim);
     }
-    fn add_gravity(&mut self, dt: f64) {
-        for i in 0..self.vec_field.len() {
-            self.vec_field[i].y = self.vec_field[i].y + dt * self.gravity
+    // Advection of values along velocity direction
+    fn advect(
+        b: usize,
+        d: &mut Vec<f64>,
+        d0: &Vec<f64>,
+        veloc_x: &Vec<f64>,
+        veloc_y: &Vec<f64>,
+        dt: f64,
+        dim: &(usize, usize),
+    ) {
+        let dtx = dt * (dim.0 - 2) as f64;
+        let dty = dt * (dim.1 - 2) as f64;
+
+        for j in 1..dim.1 - 1 {
+            let j_float = j as f64;
+            for i in 1..dim.0 - 1 {
+                let i_float = i as f64;
+
+                let tmp1 = dtx * veloc_x[Self::index(i, j, dim)];
+                let tmp2 = dty * veloc_y[Self::index(i, j, dim)];
+
+                let mut x = i_float - tmp1;
+                let mut y = j_float - tmp2;
+
+                if x < 0.5 {
+                    x = 0.5;
+                }
+                if x > dim.0 as f64 + 0.5 {
+                    x = dim.0 as f64 + 0.5;
+                }
+                let i0 = x.floor();
+                let i1 = i0 + 1.0;
+
+                if y < 0.5 {
+                    y = 0.5;
+                }
+                if y > dim.1 as f64 + 0.5 {
+                    y = dim.1 as f64 + 0.5;
+                }
+                let j0 = y.floor();
+                let j1 = j0 + 1.0;
+
+                let s1 = x - i0;
+                let s0 = 1.0 - s1;
+                let t1 = y - j0;
+                let t0 = 1.0 - t1;
+
+                let i0i = i0 as usize;
+                let i1i = i1 as usize;
+                let j0i = j0 as usize;
+                let j1i = j1 as usize;
+
+                d[Self::index(i, j, dim)] = s0
+                    * (t0 * d0[Self::index(i0i, j0i, dim)] + t1 * d0[Self::index(i0i, j1i, dim)])
+                    + s1 * (t0 * d0[Self::index(i1i, j0i, dim)]
+                        + t1 * d0[Self::index(i1i, j1i, dim)]);
+            }
         }
+        Self::set_bound(b, d, dim);
+    }
+    // Returns index value for grid coord
+    pub fn index(x: usize, y: usize, dim: &(usize, usize)) -> usize {
+        (x + y * dim.0).clamp(0, dim.0 * dim.1 - 1)
     }
 }
