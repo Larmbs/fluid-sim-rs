@@ -149,6 +149,7 @@ impl FlowBox {
 }
 
 impl FlowBox {
+    // Handles boundary conditions of the sim
     fn set_bound(bound: usize, values: &mut Vec<f64>, dim: &(usize, usize)) {
         // Deals with the top and bottom boundaries
         for x in 1..dim.0 - 1 {
