@@ -1,6 +1,6 @@
 use fluid_sim_rs::{
     flow_box::FlowBox,
-    flow_display::{DisplayMode, Flags, FlowDisplay},
+    flow_display::{DisplayMode, flags, FlowDisplay},
 };
 
 use macroquad::prelude::*;
@@ -11,7 +11,7 @@ async fn main() {
 
     let flow_display = FlowDisplay::init(
         DisplayMode::VelocityBlackWhite,
-        Flags::SHOW_VELOCITY_VECTORS,
+        flags::SHOW_VELOCITY_VECTORS,
     );
 
     loop {

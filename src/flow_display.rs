@@ -9,7 +9,7 @@ pub enum DisplayMode {
 }
 
 /// Display flags
-pub mod Flags {
+pub mod flags {
     pub const SHOW_VELOCITY_VECTORS: u8 = 0b0001;
 }
 
@@ -49,7 +49,7 @@ impl FlowDisplay {
                     }
                 }
 
-                if self.flags & Flags::SHOW_VELOCITY_VECTORS == 1 {
+                if self.flags & flags::SHOW_VELOCITY_VECTORS == 1 {
                     let x1 = x as f32 * block_size + block_size / 2.;
                     let y1 = y as f32 * block_size + block_size / 2.;
 
