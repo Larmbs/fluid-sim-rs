@@ -8,13 +8,19 @@ pub enum DisplayMode {
     VelocityBlackWhite,
 }
 
+/// Display flags
+pub mod Flags {
+    pub const SHOW_VELOCITY_VECTORS: u8 = 0b0001;
+}
+
 /// Displays a flow box given a mode
 pub struct FlowDisplay {
     mode: DisplayMode,
+    flags: u8,
 }
 impl FlowDisplay {
-    pub fn init(mode: DisplayMode) -> Self {
-        Self { mode }
+    pub fn init(mode: DisplayMode, flags: u8) -> Self {
+        Self { mode, flags }
     }
     pub fn display(&self, flow_box: &FlowBox) {
         let dim = flow_box.dim;
@@ -41,6 +47,16 @@ impl FlowDisplay {
                             color,
                         )
                     }
+                }
+
+                if self.flags & Flags::SHOW_VELOCITY_VECTORS == 1 {
+                    let x1 = x as f32 * block_size + block_size / 2.;
+                    let y1 = y as f32 * block_size + block_size / 2.;
+
+                    let x2 = x1 + flow_box.vel_x[FlowBox::index(x, y, &dim)] as f32;
+                    let y2 = y1 + flow_box.vel_y[FlowBox::index(x, y, &dim)] as f32;
+
+                    draw_line(x1, y1, x2, y2, 1.0, WHITE)
                 }
             }
         }

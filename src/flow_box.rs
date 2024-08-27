@@ -1,13 +1,12 @@
 //! Defines fluid simulation logic
-//! https://www.mikeash.com/pyblog/fluid-simulation-for-dummies.html
 
-/// An object that holds a sandbox containing fluid
+/// A box which holds a gird of fluid velocity vectors
 pub struct FlowBox {
     pub dim: (usize, usize),
 
-    vel_x: Vec<f64>,
+    pub vel_x: Vec<f64>,
     vel_x0: Vec<f64>,
-    vel_y: Vec<f64>,
+    pub vel_y: Vec<f64>,
     vel_y0: Vec<f64>,
 
     visc: f64,
@@ -31,19 +30,21 @@ impl FlowBox {
             vel_y0: vec![0.0; width * height],
             density0: vec![0.0; width * height],
             density: vec![0.0; width * height],
-            visc: 600.0,
-            diff: 0.005,
-            diffuse_iters: 1,
-            project_iters: 2,
+            visc: 0.00001,
+            diff: 0.5,
+            diffuse_iters: 2,
+            project_iters: 1,
             iter: 0,
         }
     }
+    /// Adds fluid density to a specified area
     pub fn add_fluid_density(&mut self, x: usize, y: usize, amount: f64) {
         self.density0[Self::index(x, y, &self.dim)] += amount;
         self.density0[Self::index(x + 1, y, &self.dim)] += amount;
         self.density0[Self::index(x, y + 1, &self.dim)] += amount;
         self.density0[Self::index(x + 1, y + 1, &self.dim)] += amount;
     }
+    /// Adds fluid velocity (as horizontal an vertical components) to a specified area
     pub fn add_fluid_velocity(&mut self, x: usize, y: usize, vx: f64, vy: f64) {
         self.vel_x0[Self::index(x, y, &self.dim)] += vx;
         self.vel_x0[Self::index(x + 1, y, &self.dim)] += vx;
@@ -55,6 +56,7 @@ impl FlowBox {
         self.vel_y0[Self::index(x, y + 1, &self.dim)] += vy;
         self.vel_y0[Self::index(x + 1, y + 1, &self.dim)] += vy;
     }
+    /// Adds fluid velocity (as an angle and magnitude) to a specified area but
     pub fn add_fluid_velocity_angle_mag(&mut self, x: usize, y: usize, angle: f64, mag: f64) {
         let vx = angle.cos() * mag;
         let vy = angle.sin() * mag;
@@ -63,13 +65,13 @@ impl FlowBox {
 }
 
 impl FlowBox {
-    // Steps simulation forward given dt
+    // Steps the simulation forward given dt
     pub fn step(&mut self, dt: f64) {
         let center_x: usize = self.dim.0 / 2;
         let center_y: usize = self.dim.1 / 2;
         self.iter += 1;
-        self.add_fluid_velocity_angle_mag(center_x, center_y, ((self.iter as f64) * dt) / 16., 20.0);
-        self.add_fluid_density(center_x + 1, center_y + 4, 0.1);
+        self.add_fluid_velocity_angle_mag(center_x, center_y, self.iter as f64 / 60., 20000.5);
+        self.add_fluid_density(center_x, center_y, 0.5);
 
         Self::diffuse(
             1,
@@ -192,7 +194,7 @@ impl FlowBox {
             * (values[Self::index(dim.0 - 2, dim.1 - 1, dim)]
                 + values[Self::index(dim.0 - 1, dim.1 - 2, dim)]);
     }
-
+    /// Linear solver Gauss Seidel method
     fn lin_solve(
         b: usize,
         x: &mut Vec<f64>,
@@ -218,7 +220,7 @@ impl FlowBox {
             Self::set_bound(b, x, dim);
         }
     }
-
+    /// Diffuses out values over a larger area
     fn diffuse(
         b: usize,
         x: &mut Vec<f64>,
@@ -231,7 +233,7 @@ impl FlowBox {
         let a = dt * diff * (dim.0 - 2) as f64 * (dim.1 - 2) as f64;
         Self::lin_solve(b, x, x0, a, 1.0 + 4.0 * a, iter, dim);
     }
-
+    /// Solves for divergence
     fn project(
         veloc_x: &mut Vec<f64>,
         veloc_y: &mut Vec<f64>,
@@ -253,7 +255,7 @@ impl FlowBox {
 
         Self::set_bound(0, div, dim);
         Self::set_bound(0, p, dim);
-        Self::lin_solve(0, p, div, 1.0, 6.0, iter, dim);
+        Self::lin_solve(0, p, div, 1.0, 1.9, iter, dim);
 
         for j in 1..dim.1 - 1 {
             for i in 1..dim.0 - 1 {
@@ -267,7 +269,7 @@ impl FlowBox {
         Self::set_bound(1, veloc_x, dim);
         Self::set_bound(2, veloc_y, dim);
     }
-    // Advection of values along velocity direction
+    // Moves values along fluids direction of travel
     fn advect(
         b: usize,
         d: &mut Vec<f64>,
