@@ -11,8 +11,8 @@ pub struct FluidParams {
 impl Default for FluidParams {
     fn default() -> Self {
         Self {
-            viscosity: 0.00001,
-            diffusion_rate: 0.5,
+            viscosity: 0.0000003,
+            diffusion_rate: 0.001,
             diffuse_iters: 2,
             project_iters: 1,
         }
@@ -81,6 +81,11 @@ impl FlowBox {
         let vx = angle.cos() * mag;
         let vy = angle.sin() * mag;
         self.add_fluid_velocity(x, y, vx, vy);
+    }
+    pub fn mult_fluid_density(&mut self, mag: f64) {
+        for i in 0..self.density0.len() {
+            self.density0[i] *= mag;
+        }
     }
 
     pub fn step(&mut self, dt: f64) {
@@ -257,27 +262,30 @@ impl FlowBox {
         iters: usize,
         dim: &(usize, usize),
     ) {
+        let n = (dim.0 + dim.1) / 2;
         for j in 1..dim.1 - 1 {
             for i in 1..dim.0 - 1 {
                 div[Self::index(i, j, dim)] = -0.5
                     * (vel_x[Self::index(i + 1, j, dim)] - vel_x[Self::index(i - 1, j, dim)]
                         + vel_y[Self::index(i, j + 1, dim)]
                         - vel_y[Self::index(i, j - 1, dim)])
-                    / dim.0 as f64;
+                    / n as f64;
                 p[Self::index(i, j, dim)] = 0.0;
             }
         }
 
         Self::set_bound(&Bound::Neither, div, dim);
         Self::set_bound(&Bound::Neither, p, dim);
-        Self::lin_solve(&Bound::Neither, p, div, 1.0, 1.9, iters, dim);
+        Self::lin_solve(&Bound::Neither, p, div, 1.0, 6.0, iters, dim);
 
         for j in 1..dim.1 - 1 {
             for i in 1..dim.0 - 1 {
-                vel_x[Self::index(i, j, dim)] -=
-                    0.5 * (p[Self::index(i + 1, j, dim)] - p[Self::index(i - 1, j, dim)]) as f64;
-                vel_y[Self::index(i, j, dim)] -=
-                    0.5 * (p[Self::index(i, j + 1, dim)] - p[Self::index(i, j - 1, dim)]) as f64;
+                vel_x[Self::index(i, j, dim)] -= 0.5
+                    * (p[Self::index(i + 1, j, dim)] - p[Self::index(i - 1, j, dim)])
+                    * n as f64;
+                vel_y[Self::index(i, j, dim)] -= 0.5
+                    * (p[Self::index(i, j + 1, dim)] - p[Self::index(i, j - 1, dim)])
+                    * n as f64;
             }
         }
 

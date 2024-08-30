@@ -1,8 +1,8 @@
 //! Module which defines a variety of display methods
 
 use super::flow_box::FlowBox;
+use lazy_static::lazy_static;
 use macroquad::prelude::*;
-
 /// Display modes of flow
 pub enum DisplayMode {
     VelocityBlackWhite,
@@ -10,7 +10,16 @@ pub enum DisplayMode {
 
 /// Display flags
 pub mod flags {
+    pub const NONE: u8 = 0b0000;
     pub const SHOW_VELOCITY_VECTORS: u8 = 0b0001;
+}
+
+lazy_static! {
+    static ref SPEED_COLORS: [Color; 3] = [
+        Color::from_hex(0x80ff2b),
+        Color::from_hex(0xffd429),
+        Color::from_hex(0xff3729)
+    ];
 }
 
 /// Displays a flow box given a mode
@@ -53,10 +62,22 @@ impl FlowDisplay {
                     let x1 = x as f32 * block_size + block_size / 2.;
                     let y1 = y as f32 * block_size + block_size / 2.;
 
-                    let x2 = x1 + flow_box.vel_x[FlowBox::index(x, y, &dim)] as f32;
-                    let y2 = y1 + flow_box.vel_y[FlowBox::index(x, y, &dim)] as f32;
-
-                    draw_line(x1, y1, x2, y2, 1.0, WHITE)
+                    let vx =
+                        (flow_box.vel_x[FlowBox::index(x, y, &dim)] * 80.0).clamp(-6.0, 6.0) as f32;
+                    let vy =
+                        (flow_box.vel_y[FlowBox::index(x, y, &dim)] * 80.0).clamp(-6.0, 6.0) as f32;
+                    let mag_sq = vx.powi(2) + vy.powi(2);
+                    let scalar = mag_sq / 36.0;
+                    let color = Color::from_vec(match scalar {
+                        0.0..=1.0 => SPEED_COLORS[0]
+                            .to_vec()
+                            .lerp(SPEED_COLORS[1].to_vec(), scalar),
+                        1.0..=2.0 => SPEED_COLORS[1]
+                            .to_vec()
+                            .lerp(SPEED_COLORS[2].to_vec(), scalar - 1.0),
+                        _ => SPEED_COLORS[2].to_vec(),
+                    });
+                    draw_line(x1, y1, x1 + vx, y1 + vy, 1.0, color)
                 }
             }
         }
