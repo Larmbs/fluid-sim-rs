@@ -1,5 +1,8 @@
 //! Module which defines a variety of display methods
 
+use core::f32;
+use std::f32::NAN;
+
 use super::flow_box::FlowBox;
 use lazy_static::lazy_static;
 use macroquad::prelude::*;
@@ -30,6 +33,27 @@ pub struct FlowDisplay {
 impl FlowDisplay {
     pub fn init(mode: DisplayMode, flags: u8) -> Self {
         Self { mode, flags }
+    }
+    pub fn get_mouse_cord(&self, flow_box: &FlowBox) -> (usize, usize) {
+        let dim = flow_box.dim;
+        let block_size = (screen_width() / dim.0 as f32).min(screen_height() / dim.1 as f32);
+
+        let mouse_pos = mouse_position();
+        let x = (mouse_pos.0 / block_size) as usize;
+        let y = (mouse_pos.1 / block_size) as usize;
+
+        let clamped_x = x.clamp(0, dim.0);
+        let clamped_y = y.clamp(0, dim.1);
+
+        (clamped_x, clamped_y)
+    }
+    pub fn get_mouse_delta_angle(&self) -> f32 {
+        let mouse_delta = mouse_delta_position();
+        let angle = match mouse_delta.angle_between(Vec2::from_angle(0.0)) {
+            x if x.is_nan() || x == f32::INFINITY || x == f32::NEG_INFINITY => 0.0,
+            x => x,
+        };
+        angle
     }
     pub fn display(&self, flow_box: &FlowBox) {
         let dim = flow_box.dim;
@@ -81,5 +105,6 @@ impl FlowDisplay {
                 }
             }
         }
+        draw_text(&format!("FPS: {}", get_fps()), 20.0, 20.0, 30.0, WHITE);
     }
 }

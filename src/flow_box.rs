@@ -1,4 +1,5 @@
 //! Defines fluid simulation logic
+use rayon::prelude::*;
 
 /// Represents fluid simulation behavior
 #[derive(PartialEq)]
@@ -11,10 +12,10 @@ pub struct FluidParams {
 impl Default for FluidParams {
     fn default() -> Self {
         Self {
-            viscosity: 0.0000003,
-            diffusion_rate: 0.001,
-            diffuse_iters: 2,
-            project_iters: 1,
+            viscosity: 0.00005,
+            diffusion_rate: 0.00005,
+            diffuse_iters: 4,
+            project_iters: 4,
         }
     }
 }
@@ -61,10 +62,10 @@ impl FlowBox {
 
     /* Interacting with Fluids */
     pub fn add_fluid_density(&mut self, x: usize, y: usize, amount: f64) {
-        self.density0[Self::index(x, y, &self.dim)] += amount;
-        self.density0[Self::index(x + 1, y, &self.dim)] += amount;
-        self.density0[Self::index(x, y + 1, &self.dim)] += amount;
-        self.density0[Self::index(x + 1, y + 1, &self.dim)] += amount;
+        self.density[Self::index(x, y, &self.dim)] += amount;
+        self.density[Self::index(x + 1, y, &self.dim)] += amount;
+        self.density[Self::index(x, y + 1, &self.dim)] += amount;
+        self.density[Self::index(x + 1, y + 1, &self.dim)] += amount;
     }
     pub fn add_fluid_velocity(&mut self, x: usize, y: usize, vx: f64, vy: f64) {
         self.vel_x0[Self::index(x, y, &self.dim)] += vx;
@@ -83,9 +84,7 @@ impl FlowBox {
         self.add_fluid_velocity(x, y, vx, vy);
     }
     pub fn mult_fluid_density(&mut self, mag: f64) {
-        for i in 0..self.density0.len() {
-            self.density0[i] *= mag;
-        }
+        self.density.par_iter_mut().for_each(|d| *d *= mag);
     }
 
     pub fn step(&mut self, dt: f64) {
@@ -237,6 +236,7 @@ impl FlowBox {
                         * c_recip;
                 }
             }
+
             Self::set_bound(bound, vals, dim);
         }
     }
