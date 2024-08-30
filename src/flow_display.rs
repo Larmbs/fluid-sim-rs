@@ -49,11 +49,12 @@ impl FlowDisplay {
     }
     pub fn get_mouse_delta_angle(&self) -> f32 {
         let mouse_delta = mouse_delta_position();
-        let angle = match mouse_delta.angle_between(Vec2::from_angle(0.0)) {
-            x if x.is_nan() || x == f32::INFINITY || x == f32::NEG_INFINITY => 0.0,
-            x => x,
-        };
-        angle
+        let angle = mouse_delta.angle_between(Vec2::from_angle(0.0));
+        if angle.is_finite() {
+            angle
+        } else {
+            0.0
+        }
     }
     pub fn display(&self, flow_box: &FlowBox) {
         let dim = flow_box.dim;
