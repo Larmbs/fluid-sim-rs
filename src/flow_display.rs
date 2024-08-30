@@ -1,7 +1,6 @@
 //! Module which defines a variety of display methods
 
 use core::f32;
-use std::f32::NAN;
 
 use super::flow_box::FlowBox;
 use lazy_static::lazy_static;

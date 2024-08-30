@@ -14,7 +14,7 @@ async fn main() {
 
     let flow_display = FlowDisplay::init(
         DisplayMode::VelocityBlackWhite,
-        flags::SHOW_VELOCITY_VECTORS,
+        flags::NONE,
     );
 
     const CENTER_X: usize = WIDTH / 2;
