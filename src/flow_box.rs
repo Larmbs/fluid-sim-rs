@@ -1,4 +1,5 @@
 //! Defines fluid simulation logic
+use macroquad::color::Color;
 use rayon::prelude::*;
 
 /// Represents fluid simulation behavior
@@ -37,8 +38,12 @@ pub struct FlowBox {
     pub vel_y: Vec<f64>,
     vel_y0: Vec<f64>,
 
-    pub density: Vec<f64>,
-    density0: Vec<f64>,
+    pub red_density: Vec<f64>,
+    pub green_density: Vec<f64>,
+    pub blue_density: Vec<f64>,
+    red_density0: Vec<f64>,
+    green_density0: Vec<f64>,
+    blue_density0: Vec<f64>,
 
     fluid_params: FluidParams,
 }
@@ -54,15 +59,21 @@ impl FlowBox {
             vel_x0: vec![0.0; width * height],
             vel_y: vec![0.0; width * height],
             vel_y0: vec![0.0; width * height],
-            density0: vec![0.0; width * height],
-            density: vec![0.0; width * height],
+            red_density: vec![0.0; width * height],
+            green_density: vec![0.0; width * height],
+            blue_density: vec![0.0; width * height],
+            red_density0: vec![0.0; width * height],
+            green_density0: vec![0.0; width * height],
+            blue_density0: vec![0.0; width * height],
             fluid_params,
         }
     }
 
     /* Interacting with Fluids */
-    pub fn add_fluid_density(&mut self, x: usize, y: usize, amount: f64) {
-        self.density[Self::index(&x, &y, &self.dim)] += amount;
+    pub fn add_fluid_density(&mut self, x: usize, y: usize, color: Color) {
+        self.red_density[Self::index(&x, &y, &self.dim)] += color.r as f64;
+        self.green_density[Self::index(&x, &y, &self.dim)] += color.g as f64;
+        self.blue_density[Self::index(&x, &y, &self.dim)] += color.b as f64;
     }
     pub fn add_fluid_velocity(&mut self, x: usize, y: usize, vx: f64, vy: f64) {
         let i = Self::index(&x, &y, &self.dim);
@@ -73,7 +84,9 @@ impl FlowBox {
         self.add_fluid_velocity(x, y, angle.cos() * mag, angle.sin() * mag);
     }
     pub fn scale_fluid_density(&mut self, mag: f64) {
-        self.density.par_iter_mut().for_each(|d| *d *= mag);
+        self.red_density.par_iter_mut().for_each(|d| *d *= mag);
+        self.green_density.par_iter_mut().for_each(|d| *d *= mag);
+        self.blue_density.par_iter_mut().for_each(|d| *d *= mag);
     }
 
     pub fn step(&mut self, dt: f64) {
@@ -135,8 +148,26 @@ impl FlowBox {
 
         Self::diffuse(
             &Bound::Neither,
-            &mut self.density0,
-            &self.density,
+            &mut self.red_density0,
+            &self.red_density,
+            self.fluid_params.diffusion_rate,
+            dt,
+            self.fluid_params.diffuse_iters,
+            &self.dim,
+        );
+        Self::diffuse(
+            &Bound::Neither,
+            &mut self.green_density0,
+            &self.green_density,
+            self.fluid_params.diffusion_rate,
+            dt,
+            self.fluid_params.diffuse_iters,
+            &self.dim,
+        );
+        Self::diffuse(
+            &Bound::Neither,
+            &mut self.blue_density0,
+            &self.blue_density,
             self.fluid_params.diffusion_rate,
             dt,
             self.fluid_params.diffuse_iters,
@@ -144,8 +175,26 @@ impl FlowBox {
         );
         Self::advect(
             &Bound::Neither,
-            &mut self.density,
-            &self.density0,
+            &mut self.red_density,
+            &self.red_density0,
+            &self.vel_x,
+            &self.vel_y,
+            dt,
+            &self.dim,
+        );
+        Self::advect(
+            &Bound::Neither,
+            &mut self.green_density,
+            &self.green_density0,
+            &self.vel_x,
+            &self.vel_y,
+            dt,
+            &self.dim,
+        );
+        Self::advect(
+            &Bound::Neither,
+            &mut self.blue_density,
+            &self.blue_density0,
             &self.vel_x,
             &self.vel_y,
             dt,

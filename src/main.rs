@@ -3,7 +3,7 @@ use fluid_sim_rs::{
     flow_display::{flags, DisplayMode, FlowDisplay},
 };
 
-use macroquad::prelude::*;
+use macroquad::{color::hsl_to_rgb, prelude::*};
 
 #[macroquad::main("Fluid Sim")]
 async fn main() {
@@ -19,14 +19,14 @@ async fn main() {
 
     let mut iter: u128 = 0;
     loop {
-        flow_box.scale_fluid_density(0.9);
+        //flow_box.scale_fluid_density(0.999);
 
         // let pos = flow_display.get_mouse_cord(&flow_box);
         // let angle = flow_display.get_mouse_delta_angle();
-
+        let angle = iter as f64 / 60.;
         // Interacting with fluid
-        flow_box.add_fluid_velocity_angle_mag(CENTER_X, CENTER_Y, iter as f64 / 60., 90000.0);
-        flow_box.add_fluid_density(CENTER_X, CENTER_Y, 15.0);
+        flow_box.add_fluid_velocity_angle_mag(CENTER_X, CENTER_Y, angle, 90000.0);
+        flow_box.add_fluid_density(CENTER_X, CENTER_Y, hsl_to_rgb(angle as f32 % 1.0, 25.0, 0.5));
 
         // Simulating and drawing
         flow_box.step(1. / 30.);

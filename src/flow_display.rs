@@ -60,7 +60,7 @@ impl FlowDisplay {
 
         let block_size = (screen_width() / dim.0 as f32).min(screen_height() / dim.1 as f32);
         let half_block_size = block_size / 2.0;
-        
+
         for x in 0..dim.0 {
             let screen_x = x as f32 * block_size;
             for y in 0..dim.1 {
@@ -68,12 +68,10 @@ impl FlowDisplay {
 
                 match self.mode {
                     DisplayMode::VelocityBlackWhite => {
-                        let mag =
-                            flow_box.density[FlowBox::index(&x, &y, &dim)].clamp(0.0, 1.0) as f32;
                         let color = Color {
-                            r: mag,
-                            g: mag,
-                            b: mag,
+                            r: flow_box.red_density[FlowBox::index(&x, &y, &dim)].clamp(0.0, 1.0) as f32,
+                            g: flow_box.green_density[FlowBox::index(&x, &y, &dim)].clamp(0.0, 1.0) as f32,
+                            b: flow_box.blue_density[FlowBox::index(&x, &y, &dim)].clamp(0.0, 1.0) as f32,
                             a: 1.0,
                         };
 
