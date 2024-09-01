@@ -75,14 +75,8 @@ impl FlowDisplay {
                             b: mag,
                             a: 1.0,
                         };
-                        
-                        draw_rectangle(
-                            screen_x,
-                            screen_y,
-                            block_size,
-                            block_size,
-                            color,
-                        )
+
+                        draw_rectangle(screen_x, screen_y, block_size, block_size, color)
                     }
                 }
 
@@ -90,10 +84,10 @@ impl FlowDisplay {
                     let x1 = screen_x + half_block_size;
                     let y1 = screen_y + half_block_size;
 
-                    let vx =
-                        (flow_box.vel_x[FlowBox::index(&x, &y, &dim)] * 80.0).clamp(-6.0, 6.0) as f32;
-                    let vy =
-                        (flow_box.vel_y[FlowBox::index(&x, &y, &dim)] * 80.0).clamp(-6.0, 6.0) as f32;
+                    let vx = (flow_box.vel_x[FlowBox::index(&x, &y, &dim)] * 80.0).clamp(-6.0, 6.0)
+                        as f32;
+                    let vy = (flow_box.vel_y[FlowBox::index(&x, &y, &dim)] * 80.0).clamp(-6.0, 6.0)
+                        as f32;
                     let mag_sq = vx.powi(2) + vy.powi(2);
                     let scalar = mag_sq / 36.0;
                     let color = Color::from_vec(match scalar {

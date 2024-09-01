@@ -65,15 +65,14 @@ impl FlowBox {
         self.density[Self::index(&x, &y, &self.dim)] += amount;
     }
     pub fn add_fluid_velocity(&mut self, x: usize, y: usize, vx: f64, vy: f64) {
-        self.vel_x0[Self::index(&x, &y, &self.dim)] += vx;
-        self.vel_y0[Self::index(&x, &y, &self.dim)] += vy;
+        let i = Self::index(&x, &y, &self.dim);
+        self.vel_x0[i] += vx;
+        self.vel_y0[i] += vy;
     }
     pub fn add_fluid_velocity_angle_mag(&mut self, x: usize, y: usize, angle: f64, mag: f64) {
-        let vx = angle.cos() * mag;
-        let vy = angle.sin() * mag;
-        self.add_fluid_velocity(x, y, vx, vy);
+        self.add_fluid_velocity(x, y, angle.cos() * mag, angle.sin() * mag);
     }
-    pub fn mult_fluid_density(&mut self, mag: f64) {
+    pub fn scale_fluid_density(&mut self, mag: f64) {
         self.density.par_iter_mut().for_each(|d| *d *= mag);
     }
 
@@ -155,9 +154,9 @@ impl FlowBox {
     }
 
     // Handles boundary conditions of the sim
-    fn set_bound(bound: &Bound, vals: &mut Vec<f64>, dim: &(usize, usize)) {
+    fn set_bound(bound: &Bound, vals: &mut [f64], dim: &(usize, usize)) {
         // Deals with the top and bottom boundaries
-        let vals_clone = vals.clone();
+        let vals_clone = vals.to_vec();
         // let (row1, rest) = vals.split_at_mut(dim.0);
         // let (_, row_last) = rest.split_at_mut(rest.len() - dim.0);
 
@@ -173,12 +172,11 @@ impl FlowBox {
         let dir = if bound == &Bound::Y { -1.0 } else { 1.0 };
         vals.par_chunks_mut(dim.0)
             .enumerate()
-            .filter(|(y, _)| (1..dim.1-1).contains(&y))
+            .filter(|(y, _)| (1..dim.1 - 1).contains(&y))
             .for_each(|(y, row)| {
                 row[0] = dir * vals_clone[Self::index(&1, &y, dim)];
                 row[dim.0 - 1] = dir * vals_clone[Self::index(&(dim.0 - 2), &y, dim)];
             });
-        
 
         vals[Self::index(&0, &0, dim)] =
             0.5 * (vals[Self::index(&1, &0, dim)] + vals[Self::index(&0, &1, dim)]);
@@ -196,8 +194,8 @@ impl FlowBox {
     /// Linear solver Gauss Seidel method
     fn lin_solve(
         bound: &Bound,
-        vals: &mut Vec<f64>,
-        vals0: &Vec<f64>,
+        vals: &mut [f64],
+        vals0: &[f64],
         a: f64,
         c: f64,
         iters: usize,
@@ -206,7 +204,7 @@ impl FlowBox {
         let c_recip = 1.0 / c;
 
         for _ in 0..iters {
-            let clone_vals = vals.clone();
+            let clone_vals = vals.to_vec();
 
             vals.par_iter_mut().enumerate().for_each(|(i, v)| {
                 let (x, y) = Self::pos(&i, dim);
@@ -226,8 +224,8 @@ impl FlowBox {
     /// Diffuses out values over a larger area
     fn diffuse(
         b: &Bound,
-        vals: &mut Vec<f64>,
-        vals0: &Vec<f64>,
+        vals: &mut [f64],
+        vals0: &[f64],
         diff: f64,
         dt: f64,
         iters: usize,
@@ -238,10 +236,10 @@ impl FlowBox {
     }
     /// Solves for divergence
     fn project(
-        vel_x: &mut Vec<f64>,
-        vel_y: &mut Vec<f64>,
-        p: &mut Vec<f64>,
-        div: &mut Vec<f64>,
+        vel_x: &mut [f64],
+        vel_y: &mut [f64],
+        p: &mut [f64],
+        div: &mut [f64],
         iters: usize,
         dim: &(usize, usize),
     ) {
@@ -292,10 +290,10 @@ impl FlowBox {
     // Moves values along fluids direction of travel
     fn advect(
         bound: &Bound,
-        vals: &mut Vec<f64>,
-        vals0: &Vec<f64>,
-        vel_x: &Vec<f64>,
-        vel_y: &Vec<f64>,
+        vals: &mut [f64],
+        vals0: &[f64],
+        vel_x: &[f64],
+        vel_y: &[f64],
         dt: f64,
         dim: &(usize, usize),
     ) {

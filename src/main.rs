@@ -12,17 +12,14 @@ async fn main() {
 
     let mut flow_box = FlowBox::init(WIDTH, HEIGHT);
 
-    let flow_display = FlowDisplay::init(
-        DisplayMode::VelocityBlackWhite,
-        flags::NONE,
-    );
+    let flow_display = FlowDisplay::init(DisplayMode::VelocityBlackWhite, flags::NONE);
 
     const CENTER_X: usize = WIDTH / 2;
     const CENTER_Y: usize = HEIGHT / 2;
 
     let mut iter: u128 = 0;
     loop {
-        flow_box.mult_fluid_density(0.9);
+        flow_box.scale_fluid_density(0.9);
 
         // let pos = flow_display.get_mouse_cord(&flow_box);
         // let angle = flow_display.get_mouse_delta_angle();
