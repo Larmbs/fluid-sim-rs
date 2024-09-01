@@ -59,22 +59,26 @@ impl FlowDisplay {
         let dim = flow_box.dim;
 
         let block_size = (screen_width() / dim.0 as f32).min(screen_height() / dim.1 as f32);
-
+        let half_block_size = block_size / 2.0;
         for x in 0..dim.0 {
+            let screen_x = x as f32 * block_size;
             for y in 0..dim.1 {
+                let screen_y = y as f32 * block_size;
+
                 match self.mode {
                     DisplayMode::VelocityBlackWhite => {
                         let mag =
-                            flow_box.density[FlowBox::index(x, y, &dim)].clamp(0.0, 1.0) as f32;
+                            flow_box.density[FlowBox::index(&x, &y, &dim)].clamp(0.0, 1.0) as f32;
                         let color = Color {
                             r: mag,
                             g: mag,
                             b: mag,
                             a: 1.0,
                         };
+                        
                         draw_rectangle(
-                            x as f32 * block_size,
-                            y as f32 * block_size,
+                            screen_x,
+                            screen_y,
                             block_size,
                             block_size,
                             color,
@@ -83,13 +87,13 @@ impl FlowDisplay {
                 }
 
                 if self.flags & flags::SHOW_VELOCITY_VECTORS == 1 {
-                    let x1 = x as f32 * block_size + block_size / 2.;
-                    let y1 = y as f32 * block_size + block_size / 2.;
+                    let x1 = screen_x + half_block_size;
+                    let y1 = screen_y + half_block_size;
 
                     let vx =
-                        (flow_box.vel_x[FlowBox::index(x, y, &dim)] * 80.0).clamp(-6.0, 6.0) as f32;
+                        (flow_box.vel_x[FlowBox::index(&x, &y, &dim)] * 80.0).clamp(-6.0, 6.0) as f32;
                     let vy =
-                        (flow_box.vel_y[FlowBox::index(x, y, &dim)] * 80.0).clamp(-6.0, 6.0) as f32;
+                        (flow_box.vel_y[FlowBox::index(&x, &y, &dim)] * 80.0).clamp(-6.0, 6.0) as f32;
                     let mag_sq = vx.powi(2) + vy.powi(2);
                     let scalar = mag_sq / 36.0;
                     let color = Color::from_vec(match scalar {

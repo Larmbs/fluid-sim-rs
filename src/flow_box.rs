@@ -62,21 +62,11 @@ impl FlowBox {
 
     /* Interacting with Fluids */
     pub fn add_fluid_density(&mut self, x: usize, y: usize, amount: f64) {
-        self.density[Self::index(x, y, &self.dim)] += amount;
-        self.density[Self::index(x + 1, y, &self.dim)] += amount;
-        self.density[Self::index(x, y + 1, &self.dim)] += amount;
-        self.density[Self::index(x + 1, y + 1, &self.dim)] += amount;
+        self.density[Self::index(&x, &y, &self.dim)] += amount;
     }
     pub fn add_fluid_velocity(&mut self, x: usize, y: usize, vx: f64, vy: f64) {
-        self.vel_x0[Self::index(x, y, &self.dim)] += vx;
-        self.vel_x0[Self::index(x + 1, y, &self.dim)] += vx;
-        self.vel_x0[Self::index(x, y + 1, &self.dim)] += vx;
-        self.vel_x0[Self::index(x + 1, y + 1, &self.dim)] += vx;
-
-        self.vel_y0[Self::index(x, y, &self.dim)] += vy;
-        self.vel_y0[Self::index(x + 1, y, &self.dim)] += vy;
-        self.vel_y0[Self::index(x, y + 1, &self.dim)] += vy;
-        self.vel_y0[Self::index(x + 1, y + 1, &self.dim)] += vy;
+        self.vel_x0[Self::index(&x, &y, &self.dim)] += vx;
+        self.vel_y0[Self::index(&x, &y, &self.dim)] += vy;
     }
     pub fn add_fluid_velocity_angle_mag(&mut self, x: usize, y: usize, angle: f64, mag: f64) {
         let vx = angle.cos() * mag;
@@ -167,51 +157,41 @@ impl FlowBox {
     // Handles boundary conditions of the sim
     fn set_bound(bound: &Bound, vals: &mut Vec<f64>, dim: &(usize, usize)) {
         // Deals with the top and bottom boundaries
+        let vals_clone = vals.clone();
+        // let (row1, rest) = vals.split_at_mut(dim.0);
+        // let (_, row_last) = rest.split_at_mut(rest.len() - dim.0);
+
+        // row1.par_iter_mut().zip(row_last.par_iter_mut())
+        let dir = if bound == &Bound::X { -1.0 } else { 1.0 };
         for x in 1..dim.0 - 1 {
-            (
-                vals[Self::index(x, 0, dim)],
-                vals[Self::index(x, dim.1 - 1, dim)],
-            ) = match bound {
-                Bound::X => (
-                    -vals[Self::index(x, 1, dim)],
-                    -vals[Self::index(x, dim.1 - 2, dim)],
-                ),
-                _ => (
-                    vals[Self::index(x, 1, dim)],
-                    vals[Self::index(x, dim.1 - 2, dim)],
-                ),
-            }
+            vals[Self::index(&x, &0, dim)] = dir * vals_clone[Self::index(&x, &1, dim)];
+            vals[Self::index(&x, &(dim.1 - 1), dim)] =
+                dir * vals_clone[Self::index(&x, &(dim.1 - 2), dim)];
         }
 
         // Deals with the side boundaries
-        for y in 1..dim.1 - 1 {
-            (
-                vals[Self::index(0, y, dim)],
-                vals[Self::index(dim.0 - 1, y, dim)],
-            ) = match bound {
-                Bound::Y => (
-                    -vals[Self::index(1, y, dim)],
-                    -vals[Self::index(dim.0 - 2, y, dim)],
-                ),
-                _ => (
-                    vals[Self::index(1, y, dim)],
-                    vals[Self::index(dim.0 - 2, y, dim)],
-                ),
-            }
-        }
+        let dir = if bound == &Bound::Y { -1.0 } else { 1.0 };
+        vals.par_chunks_mut(dim.0)
+            .enumerate()
+            .filter(|(y, _)| (1..dim.1-1).contains(&y))
+            .for_each(|(y, row)| {
+                row[0] = dir * vals_clone[Self::index(&1, &y, dim)];
+                row[dim.0 - 1] = dir * vals_clone[Self::index(&(dim.0 - 2), &y, dim)];
+            });
+        
 
-        vals[Self::index(0, 0, dim)] =
-            0.5 * (vals[Self::index(1, 0, dim)] + vals[Self::index(0, 1, dim)]);
+        vals[Self::index(&0, &0, dim)] =
+            0.5 * (vals[Self::index(&1, &0, dim)] + vals[Self::index(&0, &1, dim)]);
 
-        vals[Self::index(0, dim.1 - 1, dim)] =
-            0.5 * (vals[Self::index(1, dim.1 - 1, dim)] + vals[Self::index(0, dim.1 - 2, dim)]);
+        vals[Self::index(&0, &(dim.1 - 1), dim)] = 0.5
+            * (vals[Self::index(&1, &(dim.1 - 1), dim)] + vals[Self::index(&0, &(dim.1 - 2), dim)]);
 
-        vals[Self::index(dim.0 - 1, 0, dim)] =
-            0.5 * (vals[Self::index(dim.0 - 2, 0, dim)] + vals[Self::index(dim.0 - 1, 1, dim)]);
+        vals[Self::index(&(dim.0 - 1), &0, dim)] = 0.5
+            * (vals[Self::index(&(dim.0 - 2), &0, dim)] + vals[Self::index(&(dim.0 - 1), &1, dim)]);
 
-        vals[Self::index(dim.0 - 1, dim.1 - 1, dim)] = 0.5
-            * (vals[Self::index(dim.0 - 2, dim.1 - 1, dim)]
-                + vals[Self::index(dim.0 - 1, dim.1 - 2, dim)]);
+        vals[Self::index(&(dim.0 - 1), &(dim.1 - 1), dim)] = 0.5
+            * (vals[Self::index(&(dim.0 - 2), &(dim.1 - 1), dim)]
+                + vals[Self::index(&(dim.0 - 1), &(dim.1 - 2), dim)]);
     }
     /// Linear solver Gauss Seidel method
     fn lin_solve(
@@ -226,16 +206,19 @@ impl FlowBox {
         let c_recip = 1.0 / c;
 
         for _ in 0..iters {
-            for j in 1..dim.1 - 1 {
-                for i in 1..dim.0 - 1 {
-                    vals[Self::index(i, j, dim)] = (vals0[Self::index(i, j, dim)]
-                        + a * (vals[Self::index(i + 1, j, dim)]
-                            + vals[Self::index(i - 1, j, dim)]
-                            + vals[Self::index(i, j + 1, dim)]
-                            + vals[Self::index(i, j - 1, dim)]))
+            let clone_vals = vals.clone();
+
+            vals.par_iter_mut().enumerate().for_each(|(i, v)| {
+                let (x, y) = Self::pos(&i, dim);
+                if (1..dim.0 - 1).contains(&x) && (1..dim.1 - 1).contains(&y) {
+                    *v = (vals0[i]
+                        + a * (clone_vals[Self::index(&(x + 1), &y, dim)]
+                            + clone_vals[Self::index(&(x - 1), &y, dim)]
+                            + clone_vals[Self::index(&x, &(y + 1), dim)]
+                            + clone_vals[Self::index(&x, &(y - 1), dim)]))
                         * c_recip;
                 }
-            }
+            });
 
             Self::set_bound(bound, vals, dim);
         }
@@ -263,31 +246,45 @@ impl FlowBox {
         dim: &(usize, usize),
     ) {
         let n = (dim.0 + dim.1) / 2;
-        for j in 1..dim.1 - 1 {
-            for i in 1..dim.0 - 1 {
-                div[Self::index(i, j, dim)] = -0.5
-                    * (vel_x[Self::index(i + 1, j, dim)] - vel_x[Self::index(i - 1, j, dim)]
-                        + vel_y[Self::index(i, j + 1, dim)]
-                        - vel_y[Self::index(i, j - 1, dim)])
-                    / n as f64;
-                p[Self::index(i, j, dim)] = 0.0;
-            }
-        }
+
+        div.par_iter_mut()
+            .zip(p.par_iter_mut())
+            .enumerate()
+            .for_each(|(i, (v, pv))| {
+                let (x, y) = Self::pos(&i, dim);
+
+                if (1..dim.0 - 1).contains(&x) && (1..dim.1 - 1).contains(&y) {
+                    *v = -0.5
+                        * (vel_x[Self::index(&(x + 1), &&y, dim)]
+                            - vel_x[Self::index(&(x - 1), &y, dim)]
+                            + vel_y[Self::index(&x, &(y + 1), dim)]
+                            - vel_y[Self::index(&x, &(y - 1), dim)])
+                        / n as f64;
+                }
+
+                *pv = 0.0;
+            });
 
         Self::set_bound(&Bound::Neither, div, dim);
         Self::set_bound(&Bound::Neither, p, dim);
         Self::lin_solve(&Bound::Neither, p, div, 1.0, 6.0, iters, dim);
 
-        for j in 1..dim.1 - 1 {
-            for i in 1..dim.0 - 1 {
-                vel_x[Self::index(i, j, dim)] -= 0.5
-                    * (p[Self::index(i + 1, j, dim)] - p[Self::index(i - 1, j, dim)])
-                    * n as f64;
-                vel_y[Self::index(i, j, dim)] -= 0.5
-                    * (p[Self::index(i, j + 1, dim)] - p[Self::index(i, j - 1, dim)])
-                    * n as f64;
-            }
-        }
+        vel_x
+            .par_iter_mut()
+            .zip(vel_y.par_iter_mut())
+            .enumerate()
+            .for_each(|(i, (vx, vy))| {
+                let (x, y) = Self::pos(&i, dim);
+
+                if (1..dim.0 - 1).contains(&x) && (1..dim.1 - 1).contains(&y) {
+                    *vx -= 0.5
+                        * (p[Self::index(&(x + 1), &y, dim)] - p[Self::index(&(x - 1), &y, dim)])
+                        * n as f64;
+                    *vy -= 0.5
+                        * (p[Self::index(&x, &(y + 1), dim)] - p[Self::index(&x, &(y - 1), dim)])
+                        * n as f64;
+                }
+            });
 
         Self::set_bound(&Bound::X, vel_x, dim);
         Self::set_bound(&Bound::Y, vel_y, dim);
@@ -305,56 +302,62 @@ impl FlowBox {
         let dtx = dt * (dim.0 - 2) as f64;
         let dty = dt * (dim.1 - 2) as f64;
 
-        for j in 1..dim.1 - 1 {
+        vals.par_iter_mut().enumerate().for_each(|(ix, v)| {
+            let (i, j) = Self::pos(&ix, dim);
+
             let j_float = j as f64;
-            for i in 1..dim.0 - 1 {
-                let i_float = i as f64;
+            let i_float = i as f64;
 
-                let tmp1 = dtx * vel_x[Self::index(i, j, dim)];
-                let tmp2 = dty * vel_y[Self::index(i, j, dim)];
+            let tmp1 = dtx * vel_x[Self::index(&i, &j, dim)];
+            let tmp2 = dty * vel_y[Self::index(&i, &j, dim)];
 
-                let mut x = i_float - tmp1;
-                let mut y = j_float - tmp2;
+            let mut x = i_float - tmp1;
+            let mut y = j_float - tmp2;
 
-                if x < 0.5 {
-                    x = 0.5;
-                }
-                if x > dim.0 as f64 + 0.5 {
-                    x = dim.0 as f64 + 0.5;
-                }
-                let i0 = x.floor();
-                let i1 = i0 + 1.0;
-
-                if y < 0.5 {
-                    y = 0.5;
-                }
-                if y > dim.1 as f64 + 0.5 {
-                    y = dim.1 as f64 + 0.5;
-                }
-                let j0 = y.floor();
-                let j1 = j0 + 1.0;
-
-                let s1 = x - i0;
-                let s0 = 1.0 - s1;
-                let t1 = y - j0;
-                let t0 = 1.0 - t1;
-
-                let i0i = i0 as usize;
-                let i1i = i1 as usize;
-                let j0i = j0 as usize;
-                let j1i = j1 as usize;
-
-                vals[Self::index(i, j, dim)] = s0
-                    * (t0 * vals0[Self::index(i0i, j0i, dim)]
-                        + t1 * vals0[Self::index(i0i, j1i, dim)])
-                    + s1 * (t0 * vals0[Self::index(i1i, j0i, dim)]
-                        + t1 * vals0[Self::index(i1i, j1i, dim)]);
+            if x < 0.5 {
+                x = 0.5;
             }
-        }
+            if x > dim.0 as f64 + 0.5 {
+                x = dim.0 as f64 + 0.5;
+            }
+            let i0 = x.floor();
+            let i1 = i0 + 1.0;
+
+            if y < 0.5 {
+                y = 0.5;
+            }
+            if y > dim.1 as f64 + 0.5 {
+                y = dim.1 as f64 + 0.5;
+            }
+            let j0 = y.floor();
+            let j1 = j0 + 1.0;
+
+            let s1 = x - i0;
+            let s0 = 1.0 - s1;
+            let t1 = y - j0;
+            let t0 = 1.0 - t1;
+
+            let i0i = i0 as usize;
+            let i1i = i1 as usize;
+            let j0i = j0 as usize;
+            let j1i = j1 as usize;
+
+            *v = s0
+                * (t0 * vals0[Self::index(&i0i, &j0i, dim)]
+                    + t1 * vals0[Self::index(&i0i, &j1i, dim)])
+                + s1 * (t0 * vals0[Self::index(&i1i, &j0i, dim)]
+                    + t1 * vals0[Self::index(&i1i, &j1i, dim)]);
+        });
+
         Self::set_bound(bound, vals, dim);
     }
     // Returns index value for grid coord
-    pub fn index(x: usize, y: usize, dim: &(usize, usize)) -> usize {
+    #[inline]
+    pub fn index(x: &usize, y: &usize, dim: &(usize, usize)) -> usize {
         (x + y * dim.0).clamp(0, dim.0 * dim.1 - 1)
+    }
+    #[inline]
+    pub fn pos(i: &usize, dim: &(usize, usize)) -> (usize, usize) {
+        (i % dim.0, i / dim.0)
     }
 }
