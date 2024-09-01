@@ -19,7 +19,7 @@ async fn main() {
     let mut iter: u128 = 0;
     loop {
         //flow_box.scale_fluid_density(0.999);
-        
+
         let pos = flow_display.get_mouse_cord(&flow_box);
         let angle = flow_display.get_mouse_delta_angle();
         //let angle = iter as f64 / 60.;

@@ -106,12 +106,9 @@ impl FlowDisplay {
                 // Getting the correct color depending on display mode
                 let color = match self.mode {
                     DisplayMode::DensityColor => Color {
-                        r: flow_box.red_density[i]
-                            as f32,
-                        g: flow_box.green_density[i]
-                            as f32,
-                        b: flow_box.blue_density[i]
-                            as f32,
+                        r: flow_box.red_density[i] as f32,
+                        g: flow_box.green_density[i] as f32,
+                        b: flow_box.blue_density[i] as f32,
                         a: 1.0,
                     },
                     DisplayMode::DensityBlackWhite => {
@@ -136,7 +133,7 @@ impl FlowDisplay {
                             b: mag,
                             a: 1.0,
                         }
-                    },
+                    }
                 };
 
                 draw_rectangle(screen_x, screen_y, block_size, block_size, color);

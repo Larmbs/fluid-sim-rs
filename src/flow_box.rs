@@ -71,13 +71,21 @@ impl FlowBox {
 
     /* Interacting with Fluids */
     pub fn add_fluid_density(&mut self, x: usize, y: usize, color: Color) {
-        let i = Self::index(&x.clamp(0, self.dim.0 - 1), &y.clamp(0, self.dim.1 - 1), &self.dim);
+        let i = Self::index(
+            &x.clamp(0, self.dim.0 - 1),
+            &y.clamp(0, self.dim.1 - 1),
+            &self.dim,
+        );
         self.red_density[i] += color.r as f64;
         self.green_density[i] += color.g as f64;
         self.blue_density[i] += color.b as f64;
     }
     pub fn add_fluid_velocity(&mut self, x: usize, y: usize, vx: f64, vy: f64) {
-        let i = Self::index(&x.clamp(0, self.dim.0 - 1), &y.clamp(0, self.dim.1 - 1), &self.dim);
+        let i = Self::index(
+            &x.clamp(0, self.dim.0 - 1),
+            &y.clamp(0, self.dim.1 - 1),
+            &self.dim,
+        );
         self.vel_x0[i] += vx;
         self.vel_y0[i] += vy;
     }
@@ -351,27 +359,19 @@ impl FlowBox {
             let j_float = j as f64;
             let i_float = i as f64;
 
-            let tmp1 = dtx * vel_x[Self::index(&i, &j, dim)];
-            let tmp2 = dty * vel_y[Self::index(&i, &j, dim)];
+            let tmp1 = dtx * vel_x[ix];
+            let tmp2 = dty * vel_y[ix];
 
             let mut x = i_float - tmp1;
             let mut y = j_float - tmp2;
 
-            if x < 0.5 {
-                x = 0.5;
-            }
-            if x > dim.0 as f64 + 0.5 {
-                x = dim.0 as f64 + 0.5;
-            }
+            x = x.clamp(0.5, dim.0 as f64 - 0.5);
+
             let i0 = x.floor();
             let i1 = i0 + 1.0;
 
-            if y < 0.5 {
-                y = 0.5;
-            }
-            if y > dim.1 as f64 + 0.5 {
-                y = dim.1 as f64 + 0.5;
-            }
+            y = y.clamp(0.5, dim.1 as f64 - 0.5);
+
             let j0 = y.floor();
             let j1 = j0 + 1.0;
 
