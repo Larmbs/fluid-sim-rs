@@ -60,6 +60,7 @@ impl FlowDisplay {
 
         let block_size = (screen_width() / dim.0 as f32).min(screen_height() / dim.1 as f32);
         let half_block_size = block_size / 2.0;
+        
         for x in 0..dim.0 {
             let screen_x = x as f32 * block_size;
             for y in 0..dim.1 {

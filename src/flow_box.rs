@@ -231,7 +231,7 @@ impl FlowBox {
         iters: usize,
         dim: &(usize, usize),
     ) {
-        let a = dt * diff * 1000.0;
+        let a = dt * diff * 10000.0;
         Self::lin_solve(b, vals, vals0, a, 1.0 + 4.0 * a, iters, dim);
     }
     /// Solves for divergence
