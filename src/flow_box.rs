@@ -71,12 +71,13 @@ impl FlowBox {
 
     /* Interacting with Fluids */
     pub fn add_fluid_density(&mut self, x: usize, y: usize, color: Color) {
-        self.red_density[Self::index(&x, &y, &self.dim)] += color.r as f64;
-        self.green_density[Self::index(&x, &y, &self.dim)] += color.g as f64;
-        self.blue_density[Self::index(&x, &y, &self.dim)] += color.b as f64;
+        let i = Self::index(&x.clamp(0, self.dim.0 - 1), &y.clamp(0, self.dim.1 - 1), &self.dim);
+        self.red_density[i] += color.r as f64;
+        self.green_density[i] += color.g as f64;
+        self.blue_density[i] += color.b as f64;
     }
     pub fn add_fluid_velocity(&mut self, x: usize, y: usize, vx: f64, vy: f64) {
-        let i = Self::index(&x, &y, &self.dim);
+        let i = Self::index(&x.clamp(0, self.dim.0 - 1), &y.clamp(0, self.dim.1 - 1), &self.dim);
         self.vel_x0[i] += vx;
         self.vel_y0[i] += vy;
     }

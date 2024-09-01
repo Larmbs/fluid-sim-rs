@@ -1,6 +1,7 @@
 //! Module which defines a variety of display methods
 
 use core::f32;
+use std::f32::consts::PI;
 
 use super::flow_box::FlowBox;
 use lazy_static::lazy_static;
@@ -28,10 +29,11 @@ lazy_static! {
 pub struct FlowDisplay {
     mode: DisplayMode,
     flags: u8,
+    last_d_mouse_angle: Option<f32>,
 }
 impl FlowDisplay {
     pub fn init(mode: DisplayMode, flags: u8) -> Self {
-        Self { mode, flags }
+        Self { mode, flags, last_d_mouse_angle: None}
     }
     pub fn get_mouse_cord(&self, flow_box: &FlowBox) -> (usize, usize) {
         let dim = flow_box.dim;
@@ -46,13 +48,18 @@ impl FlowDisplay {
 
         (clamped_x, clamped_y)
     }
-    pub fn get_mouse_delta_angle(&self) -> f32 {
+    pub fn get_mouse_delta_angle(&mut self) -> f32 {
         let mouse_delta = mouse_delta_position();
-        let angle = mouse_delta.angle_between(Vec2::from_angle(0.0));
+        let angle = -mouse_delta.angle_between(Vec2::from_angle(0.0)) + PI;
         if angle.is_finite() {
+            self.last_d_mouse_angle = Some(angle);
             angle
         } else {
-            0.0
+            if let Some(angle) = self.last_d_mouse_angle {
+                angle
+            } else {
+                0.0
+            }
         }
     }
     pub fn display(&self, flow_box: &FlowBox) {
