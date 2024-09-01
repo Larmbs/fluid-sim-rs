@@ -7,8 +7,8 @@ use macroquad::prelude::*;
 
 #[macroquad::main("Fluid Sim")]
 async fn main() {
-    const WIDTH: usize = 200;
-    const HEIGHT: usize = 100;
+    const WIDTH: usize = 150;
+    const HEIGHT: usize = 75;
 
     let mut flow_box = FlowBox::init(WIDTH, HEIGHT);
 

@@ -14,7 +14,7 @@ impl Default for FluidParams {
         Self {
             viscosity: 0.00005,
             diffusion_rate: 0.00005,
-            diffuse_iters: 4,
+            diffuse_iters: 3,
             project_iters: 4,
         }
     }
@@ -231,7 +231,7 @@ impl FlowBox {
         iters: usize,
         dim: &(usize, usize),
     ) {
-        let a = dt * diff * (dim.0 - 2) as f64 * (dim.1 - 2) as f64;
+        let a = dt * diff * 1000.0;
         Self::lin_solve(b, vals, vals0, a, 1.0 + 4.0 * a, iters, dim);
     }
     /// Solves for divergence
@@ -243,8 +243,6 @@ impl FlowBox {
         iters: usize,
         dim: &(usize, usize),
     ) {
-        let n = (dim.0 + dim.1) / 2;
-
         div.par_iter_mut()
             .zip(p.par_iter_mut())
             .enumerate()
@@ -256,8 +254,7 @@ impl FlowBox {
                         * (vel_x[Self::index(&(x + 1), &&y, dim)]
                             - vel_x[Self::index(&(x - 1), &y, dim)]
                             + vel_y[Self::index(&x, &(y + 1), dim)]
-                            - vel_y[Self::index(&x, &(y - 1), dim)])
-                        / n as f64;
+                            - vel_y[Self::index(&x, &(y - 1), dim)]);
                 }
 
                 *pv = 0.0;
@@ -276,11 +273,9 @@ impl FlowBox {
 
                 if (1..dim.0 - 1).contains(&x) && (1..dim.1 - 1).contains(&y) {
                     *vx -= 0.5
-                        * (p[Self::index(&(x + 1), &y, dim)] - p[Self::index(&(x - 1), &y, dim)])
-                        * n as f64;
+                        * (p[Self::index(&(x + 1), &y, dim)] - p[Self::index(&(x - 1), &y, dim)]);
                     *vy -= 0.5
-                        * (p[Self::index(&x, &(y + 1), dim)] - p[Self::index(&x, &(y - 1), dim)])
-                        * n as f64;
+                        * (p[Self::index(&x, &(y + 1), dim)] - p[Self::index(&x, &(y - 1), dim)]);
                 }
             });
 
@@ -297,8 +292,8 @@ impl FlowBox {
         dt: f64,
         dim: &(usize, usize),
     ) {
-        let dtx = dt * (dim.0 - 2) as f64;
-        let dty = dt * (dim.1 - 2) as f64;
+        let dtx = dt * 100.0;
+        let dty = dt * 100.0;
 
         vals.par_iter_mut().enumerate().for_each(|(ix, v)| {
             let (i, j) = Self::pos(&ix, dim);
@@ -341,10 +336,10 @@ impl FlowBox {
             let j1i = j1 as usize;
 
             *v = s0
-                * (t0 * vals0[Self::index(&i0i, &j0i, dim)]
-                    + t1 * vals0[Self::index(&i0i, &j1i, dim)])
-                + s1 * (t0 * vals0[Self::index(&i1i, &j0i, dim)]
-                    + t1 * vals0[Self::index(&i1i, &j1i, dim)]);
+                * (t0 * vals0[Self::index(&i0i, &j0i, dim).clamp(0, dim.0 * dim.1 - 1)]
+                    + t1 * vals0[Self::index(&i0i, &j1i, dim).clamp(0, dim.0 * dim.1 - 1)])
+                + s1 * (t0 * vals0[Self::index(&i1i, &j0i, dim).clamp(0, dim.0 * dim.1 - 1)]
+                    + t1 * vals0[Self::index(&i1i, &j1i, dim).clamp(0, dim.0 * dim.1 - 1)]);
         });
 
         Self::set_bound(bound, vals, dim);
@@ -352,7 +347,7 @@ impl FlowBox {
     // Returns index value for grid coord
     #[inline]
     pub fn index(x: &usize, y: &usize, dim: &(usize, usize)) -> usize {
-        (x + y * dim.0).clamp(0, dim.0 * dim.1 - 1)
+        x + y * dim.0
     }
     #[inline]
     pub fn pos(i: &usize, dim: &(usize, usize)) -> (usize, usize) {
