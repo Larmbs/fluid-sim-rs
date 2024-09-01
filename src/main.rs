@@ -12,7 +12,7 @@ async fn main() {
 
     let mut flow_box = FlowBox::init(WIDTH, HEIGHT);
 
-    let mut flow_display = FlowDisplay::init(DisplayMode::VelocityBlackWhite, flags::NONE);
+    let mut flow_display = FlowDisplay::init(DisplayMode::DensityColor, flags::DISPLAY_FPS);
 
     let _center_pos = (WIDTH / 2, HEIGHT / 2);
 
