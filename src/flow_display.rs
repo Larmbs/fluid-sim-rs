@@ -81,7 +81,7 @@ impl FlowDisplay {
     /// Returns the last direction mouse was moving in the window
     pub fn get_mouse_delta_angle(&mut self) -> f32 {
         let mouse_delta = mouse_delta_position();
-        let angle = -mouse_delta.angle_between(Vec2::from_angle(0.0)) + PI;
+        let angle = -mouse_delta.angle_between(Vec2::from_angle(PI));
         if angle.is_finite() {
             self.last_d_mouse_angle = angle;
             angle
