@@ -2,6 +2,22 @@
 use macroquad::color::Color;
 use rayon::prelude::*;
 
+/// Represents the color density of fluid box particles
+pub struct Density<const C: usize> {
+    pub r: [f32; C],
+    pub g: [f32; C],
+    pub b: [f32; C],
+}
+impl<const C: usize> Density<C> {
+    pub fn empty() -> Self {
+        Self {
+            r: [0.0; C],
+            g: [0.0; C],
+            b: [0.0; C],
+        }
+    }
+}
+
 /// Represents fluid simulation behavior
 #[derive(PartialEq)]
 pub struct FluidParams {
@@ -30,24 +46,20 @@ enum Bound {
 }
 
 /// A box which holds a gird of fluid velocity vectors
-pub struct FlowBox {
+pub struct FlowBox<const C: usize> {
     pub dim: (usize, usize),
 
-    pub vel_x: Vec<f32>,
-    vel_x0: Vec<f32>,
-    pub vel_y: Vec<f32>,
-    vel_y0: Vec<f32>,
+    pub vel_x: [f32; C],
+    vel_x0: [f32; C],
+    pub vel_y: [f32; C],
+    vel_y0: [f32; C],
 
-    pub red_density: Vec<f32>,
-    pub green_density: Vec<f32>,
-    pub blue_density: Vec<f32>,
-    red_density0: Vec<f32>,
-    green_density0: Vec<f32>,
-    blue_density0: Vec<f32>,
+    pub density: Density<C>,
+    density0: Density<C>,
 
     fluid_params: FluidParams,
 }
-impl FlowBox {
+impl<const C: usize> FlowBox<C> {
     /* Initializing */
     pub fn init(width: usize, height: usize) -> Self {
         FlowBox::init_with_params(width, height, FluidParams::default())
@@ -55,16 +67,12 @@ impl FlowBox {
     pub fn init_with_params(width: usize, height: usize, fluid_params: FluidParams) -> Self {
         FlowBox {
             dim: (width, height),
-            vel_x: vec![0.0; width * height],
-            vel_x0: vec![0.0; width * height],
-            vel_y: vec![0.0; width * height],
-            vel_y0: vec![0.0; width * height],
-            red_density: vec![0.0; width * height],
-            green_density: vec![0.0; width * height],
-            blue_density: vec![0.0; width * height],
-            red_density0: vec![0.0; width * height],
-            green_density0: vec![0.0; width * height],
-            blue_density0: vec![0.0; width * height],
+            vel_x: [0.0; C],
+            vel_x0: [0.0; C],
+            vel_y: [0.0; C],
+            vel_y0: [0.0; C],
+            density: Density::<C>::empty(),
+            density0: Density::<C>::empty(),
             fluid_params,
         }
     }
@@ -76,9 +84,9 @@ impl FlowBox {
             &y.clamp(0, self.dim.1 - 1),
             &self.dim,
         );
-        self.red_density[i] += color.r as f32;
-        self.green_density[i] += color.g as f32;
-        self.blue_density[i] += color.b as f32;
+        self.density.r[i] += color.r;
+        self.density.g[i] += color.g;
+        self.density.b[i] += color.b;
     }
     pub fn add_fluid_velocity(&mut self, x: usize, y: usize, vx: f32, vy: f32) {
         let i = Self::index(
@@ -93,9 +101,9 @@ impl FlowBox {
         self.add_fluid_velocity(x, y, angle.cos() * mag, angle.sin() * mag);
     }
     pub fn scale_fluid_density(&mut self, mag: f32) {
-        self.red_density.par_iter_mut().for_each(|d| *d *= mag);
-        self.green_density.par_iter_mut().for_each(|d| *d *= mag);
-        self.blue_density.par_iter_mut().for_each(|d| *d *= mag);
+        self.density.r.par_iter_mut().for_each(|d| *d *= mag);
+        self.density.g.par_iter_mut().for_each(|d| *d *= mag);
+        self.density.b.par_iter_mut().for_each(|d| *d *= mag);
     }
 
     pub fn step(&mut self, dt: f32) {
@@ -157,8 +165,8 @@ impl FlowBox {
 
         Self::diffuse(
             &Bound::Neither,
-            &mut self.red_density0,
-            &self.red_density,
+            &mut self.density0.r,
+            &self.density.r,
             self.fluid_params.diffusion_rate,
             dt,
             self.fluid_params.diffuse_iters,
@@ -166,8 +174,8 @@ impl FlowBox {
         );
         Self::diffuse(
             &Bound::Neither,
-            &mut self.green_density0,
-            &self.green_density,
+            &mut self.density0.g,
+            &self.density.g,
             self.fluid_params.diffusion_rate,
             dt,
             self.fluid_params.diffuse_iters,
@@ -175,8 +183,8 @@ impl FlowBox {
         );
         Self::diffuse(
             &Bound::Neither,
-            &mut self.blue_density0,
-            &self.blue_density,
+            &mut self.density0.b,
+            &self.density.b,
             self.fluid_params.diffusion_rate,
             dt,
             self.fluid_params.diffuse_iters,
@@ -184,8 +192,8 @@ impl FlowBox {
         );
         Self::advect(
             &Bound::Neither,
-            &mut self.red_density,
-            &self.red_density0,
+            &mut self.density.r,
+            &self.density0.r,
             &self.vel_x,
             &self.vel_y,
             dt,
@@ -193,8 +201,8 @@ impl FlowBox {
         );
         Self::advect(
             &Bound::Neither,
-            &mut self.green_density,
-            &self.green_density0,
+            &mut self.density.g,
+            &self.density0.g,
             &self.vel_x,
             &self.vel_y,
             dt,
@@ -202,8 +210,8 @@ impl FlowBox {
         );
         Self::advect(
             &Bound::Neither,
-            &mut self.blue_density,
-            &self.blue_density0,
+            &mut self.density.b,
+            &self.density0.b,
             &self.vel_x,
             &self.vel_y,
             dt,

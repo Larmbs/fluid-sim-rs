@@ -65,7 +65,7 @@ impl FlowDisplay {
         self.flags = flags;
     }
     /// Returns the FlowBox grid coords of mouse
-    pub fn get_mouse_cord(&self, flow_box: &FlowBox) -> (usize, usize) {
+    pub fn get_mouse_cord<const C: usize>(&self, flow_box: &FlowBox<C>) -> (usize, usize) {
         let dim = flow_box.dim;
         let block_size = (screen_width() / dim.0 as f32).min(screen_height() / dim.1 as f32);
 
@@ -90,7 +90,7 @@ impl FlowDisplay {
         }
     }
     /// Displays fluid onto the screen
-    pub fn display(&self, flow_box: &FlowBox) {
+    pub fn display<const C: usize>(&self, flow_box: &FlowBox<C>) {
         let dim = flow_box.dim;
 
         let block_size = (screen_width() / dim.0 as f32).min(screen_height() / dim.1 as f32);
@@ -101,20 +101,20 @@ impl FlowDisplay {
             for y in 0..dim.1 {
                 let screen_y = y as f32 * block_size;
 
-                let i = FlowBox::index(&x, &y, &dim);
+                let i = FlowBox::<C>::index(&x, &y, &dim);
 
                 // Getting the correct color depending on display mode
                 let color = match self.mode {
                     DisplayMode::DensityColor => Color {
-                        r: flow_box.red_density[i] as f32,
-                        g: flow_box.green_density[i] as f32,
-                        b: flow_box.blue_density[i] as f32,
+                        r: flow_box.density.r[i],
+                        g: flow_box.density.g[i],
+                        b: flow_box.density.b[i],
                         a: 1.0,
                     },
                     DisplayMode::DensityBlackWhite => {
-                        let avg = ((flow_box.red_density[i]
-                            + flow_box.red_density[i]
-                            + flow_box.red_density[i])
+                        let avg = ((flow_box.density.r[i]
+                            + flow_box.density.g[i]
+                            + flow_box.density.b[i])
                             / 3.0) as f32;
                         Color {
                             r: avg,
