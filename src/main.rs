@@ -24,7 +24,7 @@ async fn main() {
         let angle = flow_display.get_mouse_delta_angle();
         //let angle = iter as f64 / 60.;
         // Interacting with fluid
-        flow_box.add_fluid_velocity_angle_mag(pos.0, pos.1, angle as f64, 90000.0);
+        flow_box.add_fluid_velocity_angle_mag(pos.0, pos.1, angle, 90000.0);
         flow_box.add_fluid_density(pos.0, pos.1, hsl_to_rgb(angle as f32 % 1.0, 25.0, 0.5));
 
         // Simulating and drawing

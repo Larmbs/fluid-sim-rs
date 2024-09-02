@@ -5,8 +5,8 @@ use rayon::prelude::*;
 /// Represents fluid simulation behavior
 #[derive(PartialEq)]
 pub struct FluidParams {
-    pub viscosity: f64,
-    pub diffusion_rate: f64,
+    pub viscosity: f32,
+    pub diffusion_rate: f32,
     pub diffuse_iters: usize,
     pub project_iters: usize,
 }
@@ -33,17 +33,17 @@ enum Bound {
 pub struct FlowBox {
     pub dim: (usize, usize),
 
-    pub vel_x: Vec<f64>,
-    vel_x0: Vec<f64>,
-    pub vel_y: Vec<f64>,
-    vel_y0: Vec<f64>,
+    pub vel_x: Vec<f32>,
+    vel_x0: Vec<f32>,
+    pub vel_y: Vec<f32>,
+    vel_y0: Vec<f32>,
 
-    pub red_density: Vec<f64>,
-    pub green_density: Vec<f64>,
-    pub blue_density: Vec<f64>,
-    red_density0: Vec<f64>,
-    green_density0: Vec<f64>,
-    blue_density0: Vec<f64>,
+    pub red_density: Vec<f32>,
+    pub green_density: Vec<f32>,
+    pub blue_density: Vec<f32>,
+    red_density0: Vec<f32>,
+    green_density0: Vec<f32>,
+    blue_density0: Vec<f32>,
 
     fluid_params: FluidParams,
 }
@@ -76,11 +76,11 @@ impl FlowBox {
             &y.clamp(0, self.dim.1 - 1),
             &self.dim,
         );
-        self.red_density[i] += color.r as f64;
-        self.green_density[i] += color.g as f64;
-        self.blue_density[i] += color.b as f64;
+        self.red_density[i] += color.r as f32;
+        self.green_density[i] += color.g as f32;
+        self.blue_density[i] += color.b as f32;
     }
-    pub fn add_fluid_velocity(&mut self, x: usize, y: usize, vx: f64, vy: f64) {
+    pub fn add_fluid_velocity(&mut self, x: usize, y: usize, vx: f32, vy: f32) {
         let i = Self::index(
             &x.clamp(0, self.dim.0 - 1),
             &y.clamp(0, self.dim.1 - 1),
@@ -89,16 +89,16 @@ impl FlowBox {
         self.vel_x0[i] += vx;
         self.vel_y0[i] += vy;
     }
-    pub fn add_fluid_velocity_angle_mag(&mut self, x: usize, y: usize, angle: f64, mag: f64) {
+    pub fn add_fluid_velocity_angle_mag(&mut self, x: usize, y: usize, angle: f32, mag: f32) {
         self.add_fluid_velocity(x, y, angle.cos() * mag, angle.sin() * mag);
     }
-    pub fn scale_fluid_density(&mut self, mag: f64) {
+    pub fn scale_fluid_density(&mut self, mag: f32) {
         self.red_density.par_iter_mut().for_each(|d| *d *= mag);
         self.green_density.par_iter_mut().for_each(|d| *d *= mag);
         self.blue_density.par_iter_mut().for_each(|d| *d *= mag);
     }
 
-    pub fn step(&mut self, dt: f64) {
+    pub fn step(&mut self, dt: f32) {
         Self::diffuse(
             &Bound::X,
             &mut self.vel_x0,
@@ -212,7 +212,7 @@ impl FlowBox {
     }
 
     // Handles boundary conditions of the sim
-    fn set_bound(bound: &Bound, vals: &mut [f64], dim: &(usize, usize)) {
+    fn set_bound(bound: &Bound, vals: &mut [f32], dim: &(usize, usize)) {
         // Deals with the top and bottom boundaries
         let vals_clone = vals.to_vec();
         // let (row1, rest) = vals.split_at_mut(dim.0);
@@ -252,10 +252,10 @@ impl FlowBox {
     /// Linear solver Gauss Seidel method
     fn lin_solve(
         bound: &Bound,
-        vals: &mut [f64],
-        vals0: &[f64],
-        a: f64,
-        c: f64,
+        vals: &mut [f32],
+        vals0: &[f32],
+        a: f32,
+        c: f32,
         iters: usize,
         dim: &(usize, usize),
     ) {
@@ -282,10 +282,10 @@ impl FlowBox {
     /// Diffuses out values over a larger area
     fn diffuse(
         b: &Bound,
-        vals: &mut [f64],
-        vals0: &[f64],
-        diff: f64,
-        dt: f64,
+        vals: &mut [f32],
+        vals0: &[f32],
+        diff: f32,
+        dt: f32,
         iters: usize,
         dim: &(usize, usize),
     ) {
@@ -294,10 +294,10 @@ impl FlowBox {
     }
     /// Solves for divergence
     fn project(
-        vel_x: &mut [f64],
-        vel_y: &mut [f64],
-        p: &mut [f64],
-        div: &mut [f64],
+        vel_x: &mut [f32],
+        vel_y: &mut [f32],
+        p: &mut [f32],
+        div: &mut [f32],
         iters: usize,
         dim: &(usize, usize),
     ) {
@@ -343,11 +343,11 @@ impl FlowBox {
     // Moves values along fluids direction of travel
     fn advect(
         bound: &Bound,
-        vals: &mut [f64],
-        vals0: &[f64],
-        vel_x: &[f64],
-        vel_y: &[f64],
-        dt: f64,
+        vals: &mut [f32],
+        vals0: &[f32],
+        vel_x: &[f32],
+        vel_y: &[f32],
+        dt: f32,
         dim: &(usize, usize),
     ) {
         let dtx = dt * 100.0;
@@ -356,8 +356,8 @@ impl FlowBox {
         vals.par_iter_mut().enumerate().for_each(|(ix, v)| {
             let (i, j) = Self::pos(&ix, dim);
 
-            let j_float = j as f64;
-            let i_float = i as f64;
+            let j_float = j as f32;
+            let i_float = i as f32;
 
             let tmp1 = dtx * vel_x[ix];
             let tmp2 = dty * vel_y[ix];
@@ -365,12 +365,12 @@ impl FlowBox {
             let mut x = i_float - tmp1;
             let mut y = j_float - tmp2;
 
-            x = x.clamp(0.5, dim.0 as f64 - 0.5);
+            x = x.clamp(0.5, dim.0 as f32 - 0.5);
 
             let i0 = x.floor();
             let i1 = i0 + 1.0;
 
-            y = y.clamp(0.5, dim.1 as f64 - 0.5);
+            y = y.clamp(0.5, dim.1 as f32 - 0.5);
 
             let j0 = y.floor();
             let j1 = j0 + 1.0;
