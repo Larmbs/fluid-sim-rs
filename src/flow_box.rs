@@ -1,21 +1,8 @@
 //! Defines fluid simulation logic
-use rayon::prelude::*;
+use std::ops::{Add, Div, Mul, Sub};
 
-/// Represents the color density of fluid box particles
-pub struct Density<const C: usize> {
-    pub r: [f32; C],
-    pub g: [f32; C],
-    pub b: [f32; C],
-}
-impl<const C: usize> Density<C> {
-    pub fn empty() -> Self {
-        Self {
-            r: [0.0; C],
-            g: [0.0; C],
-            b: [0.0; C],
-        }
-    }
-}
+use glam::Vec3;
+use rayon::prelude::*;
 
 /// Represents fluid simulation behavior
 #[derive(PartialEq)]
@@ -53,8 +40,8 @@ pub struct FlowBox<const C: usize> {
     pub vel_y: [f32; C],
     vel_y0: [f32; C],
 
-    pub density: Density<C>,
-    density0: Density<C>,
+    pub density: [Vec3; C],
+    density0: [Vec3; C],
 
     fluid_params: FluidParams,
 }
@@ -70,8 +57,8 @@ impl<const C: usize> FlowBox<C> {
             vel_x0: [0.0; C],
             vel_y: [0.0; C],
             vel_y0: [0.0; C],
-            density: Density::<C>::empty(),
-            density0: Density::<C>::empty(),
+            density: [Vec3::ZERO; C],
+            density0: [Vec3::ZERO; C],
             fluid_params,
         }
     }
@@ -83,9 +70,7 @@ impl<const C: usize> FlowBox<C> {
             &y.clamp(0, self.dim.1 - 1),
             &self.dim,
         );
-        self.density.r[i] += color[0];
-        self.density.g[i] += color[1];
-        self.density.b[i] += color[2];
+        self.density[i] = self.density[i].add(Vec3::new(color[0], color[1], color[2]));
     }
     pub fn add_fluid_velocity(&mut self, x: usize, y: usize, vx: f32, vy: f32) {
         let i = Self::index(
@@ -100,9 +85,7 @@ impl<const C: usize> FlowBox<C> {
         self.add_fluid_velocity(x, y, angle.cos() * mag, angle.sin() * mag);
     }
     pub fn scale_fluid_density(&mut self, mag: f32) {
-        self.density.r.par_iter_mut().for_each(|d| *d *= mag);
-        self.density.g.par_iter_mut().for_each(|d| *d *= mag);
-        self.density.b.par_iter_mut().for_each(|d| *d *= mag);
+        self.density.par_iter_mut().for_each(|d| *d *= mag);
     }
 
     pub fn step(&mut self, dt: f32) {
@@ -152,7 +135,6 @@ impl<const C: usize> FlowBox<C> {
             dt,
             &self.dim,
         );
-
         Self::project(
             &mut self.vel_x,
             &mut self.vel_y,
@@ -164,26 +146,8 @@ impl<const C: usize> FlowBox<C> {
 
         Self::diffuse(
             &Bound::Neither,
-            &mut self.density0.r,
-            &self.density.r,
-            self.fluid_params.diffusion_rate,
-            dt,
-            self.fluid_params.diffuse_iters,
-            &self.dim,
-        );
-        Self::diffuse(
-            &Bound::Neither,
-            &mut self.density0.g,
-            &self.density.g,
-            self.fluid_params.diffusion_rate,
-            dt,
-            self.fluid_params.diffuse_iters,
-            &self.dim,
-        );
-        Self::diffuse(
-            &Bound::Neither,
-            &mut self.density0.b,
-            &self.density.b,
+            &mut self.density0,
+            &self.density,
             self.fluid_params.diffusion_rate,
             dt,
             self.fluid_params.diffuse_iters,
@@ -191,26 +155,8 @@ impl<const C: usize> FlowBox<C> {
         );
         Self::advect(
             &Bound::Neither,
-            &mut self.density.r,
-            &self.density0.r,
-            &self.vel_x,
-            &self.vel_y,
-            dt,
-            &self.dim,
-        );
-        Self::advect(
-            &Bound::Neither,
-            &mut self.density.g,
-            &self.density0.g,
-            &self.vel_x,
-            &self.vel_y,
-            dt,
-            &self.dim,
-        );
-        Self::advect(
-            &Bound::Neither,
-            &mut self.density.b,
-            &self.density0.b,
+            &mut self.density,
+            &self.density0,
             &self.vel_x,
             &self.vel_y,
             dt,
@@ -219,47 +165,68 @@ impl<const C: usize> FlowBox<C> {
     }
 
     // Handles boundary conditions of the sim
-    fn set_bound(bound: &Bound, vals: &mut [f32], dim: &(usize, usize)) {
+    fn set_bound<T>(bound: &Bound, vals: &mut [T], dim: &(usize, usize))
+    where
+        T: Copy
+            + Add<Output = T>
+            + Sub<Output = T>
+            + Mul<Output = T>
+            + Mul<f32, Output = T>
+            + Div<Output = T>
+            + Send
+            + Sync,
+    {
         // Deals with the top and bottom boundaries
         let vals_clone = vals.to_vec();
         let dir = if bound == &Bound::X { -1.0 } else { 1.0 };
         for x in 1..dim.0 - 1 {
-            vals[Self::index(&x, &0, dim)] = dir * vals_clone[Self::index(&x, &1, dim)];
+            vals[Self::index(&x, &0, dim)] = vals_clone[Self::index(&x, &1, dim)].mul(dir);
             vals[Self::index(&x, &(dim.1 - 1), dim)] =
-                dir * vals_clone[Self::index(&x, &(dim.1 - 2), dim)];
+                vals_clone[Self::index(&x, &(dim.1 - 2), dim)].mul(dir);
         }
 
         // Deals with the side boundaries
         let dir = if bound == &Bound::Y { -1.0 } else { 1.0 };
         for y in 1..dim.1 - 1 {
-            vals[Self::index(&0, &y, dim)] = dir * vals_clone[Self::index(&1, &y, dim)];
+            vals[Self::index(&0, &y, dim)] = vals_clone[Self::index(&1, &y, dim)].mul(dir);
             vals[Self::index(&(dim.0 - 1), &y, dim)] =
-                dir * vals_clone[Self::index(&(dim.0 - 2), &y, dim)];
+                vals_clone[Self::index(&(dim.0 - 2), &y, dim)].mul(dir);
         }
 
         vals[Self::index(&0, &0, dim)] =
-            0.5 * (vals[Self::index(&1, &0, dim)] + vals[Self::index(&0, &1, dim)]);
+            (vals[Self::index(&1, &0, dim)] + vals[Self::index(&0, &1, dim)]).mul(0.5);
 
-        vals[Self::index(&0, &(dim.1 - 1), dim)] = 0.5
-            * (vals[Self::index(&1, &(dim.1 - 1), dim)] + vals[Self::index(&0, &(dim.1 - 2), dim)]);
+        vals[Self::index(&0, &(dim.1 - 1), dim)] = (vals[Self::index(&1, &(dim.1 - 1), dim)]
+            + vals[Self::index(&0, &(dim.1 - 2), dim)])
+        .mul(0.5);
 
-        vals[Self::index(&(dim.0 - 1), &0, dim)] = 0.5
-            * (vals[Self::index(&(dim.0 - 2), &0, dim)] + vals[Self::index(&(dim.0 - 1), &1, dim)]);
+        vals[Self::index(&(dim.0 - 1), &0, dim)] = (vals[Self::index(&(dim.0 - 2), &0, dim)]
+            + vals[Self::index(&(dim.0 - 1), &1, dim)])
+        .mul(0.5);
 
-        vals[Self::index(&(dim.0 - 1), &(dim.1 - 1), dim)] = 0.5
-            * (vals[Self::index(&(dim.0 - 2), &(dim.1 - 1), dim)]
-                + vals[Self::index(&(dim.0 - 1), &(dim.1 - 2), dim)]);
+        vals[Self::index(&(dim.0 - 1), &(dim.1 - 1), dim)] = (vals
+            [Self::index(&(dim.0 - 2), &(dim.1 - 1), dim)]
+            + vals[Self::index(&(dim.0 - 1), &(dim.1 - 2), dim)])
+        .mul(0.5);
     }
     /// Linear solver Gauss Seidel method
-    fn lin_solve(
+    fn lin_solve<T>(
         bound: &Bound,
-        vals: &mut [f32],
-        vals0: &[f32],
+        vals: &mut [T],
+        vals0: &[T],
         a: f32,
         c: f32,
         iters: usize,
         dim: &(usize, usize),
-    ) {
+    ) where
+    T: Copy
+        + Add<Output = T>
+        + Sub<Output = T>
+        + Mul<Output = T>
+        + Mul<f32, Output = T>
+        + Div<Output = T>
+        + Send
+        + Sync, {
         let c_recip = 1.0 / c;
 
         for _ in 0..iters {
@@ -269,10 +236,10 @@ impl<const C: usize> FlowBox<C> {
                 let (x, y) = Self::pos(&i, dim);
                 if (1..dim.0 - 1).contains(&x) && (1..dim.1 - 1).contains(&y) {
                     *v = (vals0[i]
-                        + a * (clone_vals[Self::index(&(x + 1), &y, dim)]
+                        + (clone_vals[Self::index(&(x + 1), &y, dim)]
                             + clone_vals[Self::index(&(x - 1), &y, dim)]
                             + clone_vals[Self::index(&x, &(y + 1), dim)]
-                            + clone_vals[Self::index(&x, &(y - 1), dim)]))
+                            + clone_vals[Self::index(&x, &(y - 1), dim)]).mul(a))
                         * c_recip;
                 }
             });
@@ -281,15 +248,23 @@ impl<const C: usize> FlowBox<C> {
         }
     }
     /// Diffuses out values over a larger area
-    fn diffuse(
+    fn diffuse<T>(
         b: &Bound,
-        vals: &mut [f32],
-        vals0: &[f32],
+        vals: &mut [T],
+        vals0: &[T],
         diff: f32,
         dt: f32,
         iters: usize,
         dim: &(usize, usize),
-    ) {
+    ) where
+    T: Copy
+        + Add<Output = T>
+        + Sub<Output = T>
+        + Mul<Output = T>
+        + Mul<f32, Output = T>
+        + Div<Output = T>
+        + Send
+        + Sync, {
         let a = dt * diff * 10000.0;
         Self::lin_solve(b, vals, vals0, a, 1.0 + 4.0 * a, iters, dim);
     }
@@ -342,15 +317,24 @@ impl<const C: usize> FlowBox<C> {
         Self::set_bound(&Bound::Y, vel_y, dim);
     }
     // Moves values along fluids direction of travel
-    fn advect(
+    fn advect<T>(
         bound: &Bound,
-        vals: &mut [f32],
-        vals0: &[f32],
+        vals: &mut [T],
+        vals0: &[T],
         vel_x: &[f32],
         vel_y: &[f32],
         dt: f32,
         dim: &(usize, usize),
-    ) {
+    ) where
+        T: Copy
+            + Add<Output = T>
+            + Sub<Output = T>
+            + Mul<Output = T>
+            + Mul<f32, Output = T>
+            + Div<Output = T>
+            + Send
+            + Sync,
+    {
         let dtx = dt * 100.0;
         let dty = dt * 100.0;
 
@@ -386,11 +370,12 @@ impl<const C: usize> FlowBox<C> {
             let j0i = j0 as usize;
             let j1i = j1 as usize;
 
-            *v = s0
-                * (t0 * vals0[Self::index(&i0i, &j0i, dim).clamp(0, dim.0 * dim.1 - 1)]
-                    + t1 * vals0[Self::index(&i0i, &j1i, dim).clamp(0, dim.0 * dim.1 - 1)])
-                + s1 * (t0 * vals0[Self::index(&i1i, &j0i, dim).clamp(0, dim.0 * dim.1 - 1)]
-                    + t1 * vals0[Self::index(&i1i, &j1i, dim).clamp(0, dim.0 * dim.1 - 1)]);
+            *v = (vals0[Self::index(&i0i, &j0i, dim).clamp(0, dim.0 * dim.1 - 1)].mul(t0)
+                + vals0[Self::index(&i0i, &j1i, dim).clamp(0, dim.0 * dim.1 - 1)].mul(t1))
+            .mul(s0)
+                + (vals0[Self::index(&i1i, &j0i, dim).clamp(0, dim.0 * dim.1 - 1)].mul(t0)
+                    + vals0[Self::index(&i1i, &j1i, dim).clamp(0, dim.0 * dim.1 - 1)].mul(t1))
+                .mul(s1);
         });
 
         Self::set_bound(bound, vals, dim);

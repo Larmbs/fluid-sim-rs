@@ -81,14 +81,14 @@ impl FlowDisplay {
             // Getting the correct color depending on display mode
             let color = match self.mode {
                 DisplayMode::DensityColor => Color::new(
-                    flow_box.density.r[i],
-                    flow_box.density.g[i],
-                    flow_box.density.b[i],
+                    flow_box.density[i].x,
+                    flow_box.density[i].y,
+                    flow_box.density[i].z,
                     1.0,
                 ),
                 DisplayMode::DensityBlackWhite => {
                     let avg =
-                        (flow_box.density.r[i] + flow_box.density.g[i] + flow_box.density.b[i])
+                        (flow_box.density[i].x +flow_box.density[i].y + flow_box.density[i].z)
                             / 3.0;
                     Color::new(avg, avg, avg, 1.0)
                 }
