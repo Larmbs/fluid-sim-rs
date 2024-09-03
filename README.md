@@ -1,5 +1,7 @@
 # Fluid Simulation in Rust
 
+![](Example.png "Fluid Sim")
+
 ## Types of Fluid Sim
 There are two main types of fluid simulations, there are [Eulerian Fluid Simulators](https://en.wikipedia.org/wiki/Euler_equations_(fluid_dynamics)) and [Smoothed Particle Hydrodynamics Fluid Simulators](https://en.wikipedia.org/wiki/Smoothed-particle_hydrodynamics). Each are competitive adn have their own pros and cons is approximating fluid behavior.
 

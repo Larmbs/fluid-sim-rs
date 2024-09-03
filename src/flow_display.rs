@@ -49,8 +49,8 @@ pub struct FlowDisplay {
     last_d_mouse_angle: f32,
 }
 impl FlowDisplay {
-    pub fn init(mode: DisplayMode, flags: u8) -> Self {
-        Self {
+    pub fn init(mode: DisplayMode, flags: u8) -> FlowDisplay {
+        FlowDisplay {
             mode,
             flags,
             last_d_mouse_angle: 0.0,
@@ -94,7 +94,6 @@ impl FlowDisplay {
         let dim = flow_box.dim;
 
         let block_size = (screen_width() / dim.0 as f32).min(screen_height() / dim.1 as f32);
-        //let half_block_size = block_size / 2.0;
 
         for x in 0..dim.0 {
             let screen_x = x as f32 * block_size;
@@ -137,25 +136,6 @@ impl FlowDisplay {
                 };
 
                 draw_rectangle(screen_x, screen_y, block_size, block_size, color);
-
-                if self.flags & flags::SHOW_VELOCITY_VECTORS != 0 {
-                    // Needs a rework
-
-                    // let x1 = screen_x + half_block_size;
-                    // let y1 = screen_y + half_block_size;
-
-                    // let vx = (flow_box.vel_x[i] * 80.0).clamp(-6.0, 6.0)
-                    //     as f32;
-                    // let vy = (flow_box.vel_y[i] * 80.0).clamp(-6.0, 6.0)
-                    //     as f32;
-                    // let mag_sq = vx.powi(2) + vy.powi(2);
-                    // let scalar = mag_sq / 36.0;
-
-                    // let color =
-                    //     lerp_3_colors(&SPEED_COLORS[0], &SPEED_COLORS[1], &SPEED_COLORS[2], scalar);
-
-                    // draw_line(x1, y1, x1 + vx, y1 + vy, 1.0, color)
-                }
             }
         }
         if self.flags & flags::DISPLAY_FPS != 0 {
