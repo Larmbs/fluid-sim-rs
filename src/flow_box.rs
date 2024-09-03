@@ -231,13 +231,11 @@ impl<const C: usize> FlowBox<C> {
 
         // Deals with the side boundaries
         let dir = if bound == &Bound::Y { -1.0 } else { 1.0 };
-        vals.par_chunks_mut(dim.0)
-            .enumerate()
-            .filter(|(y, _)| (1..dim.1 - 1).contains(&y))
-            .for_each(|(y, row)| {
-                row[0] = dir * vals_clone[Self::index(&1, &y, dim)];
-                row[dim.0 - 1] = dir * vals_clone[Self::index(&(dim.0 - 2), &y, dim)];
-            });
+        for y in 1..dim.1 - 1 {
+            vals[Self::index(&0, &y, dim)] = dir * vals_clone[Self::index(&1, &y, dim)];
+            vals[Self::index(&(dim.0 - 1), &y, dim)] =
+                dir * vals_clone[Self::index(&(dim.0 - 2), &y, dim)];
+        }
 
         vals[Self::index(&0, &0, dim)] =
             0.5 * (vals[Self::index(&1, &0, dim)] + vals[Self::index(&0, &1, dim)]);
