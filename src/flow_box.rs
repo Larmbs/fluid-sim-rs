@@ -1,5 +1,4 @@
 //! Defines fluid simulation logic
-use macroquad::color::Color;
 use rayon::prelude::*;
 
 /// Represents the color density of fluid box particles
@@ -78,15 +77,15 @@ impl<const C: usize> FlowBox<C> {
     }
 
     /* Interacting with Fluids */
-    pub fn add_fluid_density(&mut self, x: usize, y: usize, color: Color) {
+    pub fn add_fluid_density(&mut self, x: usize, y: usize, color: (f32, f32, f32)) {
         let i = Self::index(
             &x.clamp(0, self.dim.0 - 1),
             &y.clamp(0, self.dim.1 - 1),
             &self.dim,
         );
-        self.density.r[i] += color.r;
-        self.density.g[i] += color.g;
-        self.density.b[i] += color.b;
+        self.density.r[i] += color.0;
+        self.density.g[i] += color.1;
+        self.density.b[i] += color.2;
     }
     pub fn add_fluid_velocity(&mut self, x: usize, y: usize, vx: f32, vy: f32) {
         let i = Self::index(

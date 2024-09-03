@@ -1,145 +1,157 @@
-//! Defines object capable of drawing a FlowBox
-
-use std::f32::consts::PI;
-
-use super::flow_box::FlowBox;
-use lazy_static::lazy_static;
-use macroquad::prelude::*;
-
-/// Different viewing modes for FlowBox
-pub enum DisplayMode {
-    DensityBlackWhite,
-    DensityColor,
-    VelocityBlackWhite,
+use crate::flow_box::{self, FlowBox};
+use glam::ivec2;
+use miniquad::*;
+use rayon::prelude::*;
+#[repr(C)]
+struct Vertex {
+    in_color: [f32; 3],
 }
 
-/// Flags for debugging fluid sim
-pub mod flags {
-    pub const NONE: u8 = 0b0000;
-    pub const SHOW_VELOCITY_VECTORS: u8 = 0b0001;
-    pub const DISPLAY_FPS: u8 = 0b0010;
+fn prepare_vertex_data<const C: usize>(
+    density: &flow_box::Density<C>,
+    dim_sim: (usize, usize),
+) -> Vec<Vertex> {
+    (0..dim_sim.0 * dim_sim.1)
+        .into_par_iter()
+        .map(|i| Vertex {
+            in_color: [density.r[i], density.g[i], density.b[i]],
+        })
+        .collect::<Vec<Vertex>>()
+}
+fn create_index_buffer(dim_sim: (usize, usize)) -> Vec<u16> {
+    let mut indices = Vec::new();
+    for y in 0..dim_sim.1 - 1 {
+        for x in 0..dim_sim.0 - 1 {
+            let i = (y * dim_sim.0 + x) as u16;
+            indices.push(i);
+            indices.push(i + 1);
+            indices.push(i + dim_sim.0 as u16);
+
+            indices.push(i + 1);
+            indices.push(i + 1 + dim_sim.0 as u16);
+            indices.push(i + dim_sim.0 as u16);
+        }
+    }
+    indices
 }
 
-lazy_static! {
-    static ref SPEED_COLORS: [Color; 3] = [
-        Color::from_hex(0x80ff2b),
-        Color::from_hex(0xffd429),
-        Color::from_hex(0xff3729)
-    ];
+pub struct FlowDisplay<const C: usize> {
+    flow_box: FlowBox<C>,
+    pipeline: Pipeline,
+    bindings: Bindings,
+    ctx: Box<dyn RenderingBackend>,
+    iter: u128,
+    index_buffer_len: usize,
 }
 
-// /// Linear interpolates between two colors s 0.0-1.0
-// fn lerp_colors(color1: &Color, color2: &Color, s: f32) -> Color {
-//     Color::from_vec(color1.to_vec().lerp(color2.to_vec(), s))
-// }
+impl<const C: usize> FlowDisplay<C> {
+    pub fn new(flow_box: FlowBox<C>) -> FlowDisplay<C> {
+        let mut ctx: Box<dyn RenderingBackend> = window::new_rendering_backend();
 
-// /// Linear interpolates between three colors s 0.0-2.0
-// fn lerp_3_colors(color1: &Color, color2: &Color, color3: &Color, s: f32) -> Color {
-//     match s {
-//         0.0..=1.0 => lerp_colors(color1, color2, s),
-//         1.0..=2.0 => lerp_colors(color2, color3, s - 1.0),
-//         _ => *color3,
-//     }
-// }
+        let vertex_buffer = ctx.new_buffer(
+            BufferType::VertexBuffer,
+            BufferUsage::Immutable,
+            BufferSource::slice(&prepare_vertex_data(&flow_box.density, flow_box.dim)),
+        );
+        let index_buffer = create_index_buffer(flow_box.dim);
+        let index_buffer_len: usize = index_buffer.len();
+        let index_buffer = ctx.new_buffer(
+            BufferType::IndexBuffer,
+            BufferUsage::Immutable,
+            BufferSource::slice(&index_buffer),
+        );
 
-/// Displays a FlowBox
-pub struct FlowDisplay {
-    mode: DisplayMode,
-    flags: u8,
-    last_d_mouse_angle: f32,
+        let bindings = Bindings {
+            vertex_buffers: vec![vertex_buffer],
+            index_buffer: index_buffer,
+            images: vec![],
+        };
+
+        let shader = ctx
+            .new_shader(
+                ShaderSource::Glsl {
+                    vertex: shader::VERTEX,
+                    fragment: shader::FRAGMENT,
+                },
+                shader::meta(),
+            )
+            .unwrap();
+
+        let pipeline = ctx.new_pipeline(
+            &[BufferLayout::default()],
+            &[VertexAttribute::new("in_color", VertexFormat::Float3)],
+            shader,
+            PipelineParams::default(),
+        );
+
+        FlowDisplay::<C> {
+            pipeline,
+            bindings,
+            ctx,
+            flow_box,
+            iter: 0,
+            index_buffer_len,
+        }
+    }
 }
-impl FlowDisplay {
-    pub fn init(mode: DisplayMode, flags: u8) -> FlowDisplay {
-        FlowDisplay {
-            mode,
-            flags,
-            last_d_mouse_angle: 0.0,
+
+impl<const C: usize> EventHandler for FlowDisplay<C> {
+    fn update(&mut self) {
+        let pos = (self.flow_box.dim.0 / 2, self.flow_box.dim.1 / 2);
+        let angle = self.iter as f32 / 60.;
+
+        self.flow_box
+            .add_fluid_velocity_angle_mag(pos.0, pos.1, angle, 90000.0);
+        self.flow_box.add_fluid_density(
+            pos.0,
+            pos.1,
+            ((angle * 3.0) % 1.0, angle % 1.0, (angle * 2.0) % 1.0),
+        );
+
+        self.flow_box.step(1.0 / 30.0);
+        self.iter = self.iter.wrapping_add(1);
+        self.ctx.buffer_update(
+            self.bindings.vertex_buffers[0],
+            BufferSource::slice(&prepare_vertex_data(
+                &self.flow_box.density,
+                self.flow_box.dim,
+            )),
+        )
+    }
+
+    fn draw(&mut self) {
+        let sim_dim = ivec2(self.flow_box.dim.0 as i32, self.flow_box.dim.1 as i32);
+        self.ctx.begin_default_pass(Default::default());
+
+        self.ctx.apply_pipeline(&self.pipeline);
+        self.ctx.apply_bindings(&self.bindings);
+        self.ctx.apply_uniforms(UniformsSource::table(&shader::Uniforms { sim_dim }));
+
+        self.ctx.draw(0, self.index_buffer_len as i32, 1);
+        self.ctx.end_render_pass();
+
+        self.ctx.commit_frame();
+    }
+}
+
+mod shader {
+    use miniquad::*;
+
+    pub const VERTEX: &str = include_str!("../shaders/vert_shader.glsl");
+
+    pub const FRAGMENT: &str = include_str!("../shaders/frag_shader.glsl");
+
+    pub fn meta() -> ShaderMeta {
+        ShaderMeta {
+            images: vec![],
+            uniforms: UniformBlockLayout {
+                uniforms: vec![UniformDesc::new("sim_dim", UniformType::Int2)],
+            },
         }
     }
-    /// Changes the display mode
-    pub fn set_mode(&mut self, mode: DisplayMode) {
-        self.mode = mode;
-    }
-    /// Sets FluidDisplay flags
-    pub fn set_flags(&mut self, flags: u8) {
-        self.flags = flags;
-    }
-    /// Returns the FlowBox grid coords of mouse
-    pub fn get_mouse_cord<const C: usize>(&self, flow_box: &FlowBox<C>) -> (usize, usize) {
-        let dim = flow_box.dim;
-        let block_size = (screen_width() / dim.0 as f32).min(screen_height() / dim.1 as f32);
 
-        let mouse_pos = mouse_position();
-        let x = (mouse_pos.0 / block_size) as usize;
-        let y = (mouse_pos.1 / block_size) as usize;
-
-        let clamped_x = x.clamp(0, dim.0);
-        let clamped_y = y.clamp(0, dim.1);
-
-        (clamped_x, clamped_y)
-    }
-    /// Returns the last direction mouse was moving in the window
-    pub fn get_mouse_delta_angle(&mut self) -> f32 {
-        let mouse_delta = mouse_delta_position();
-        let angle = -mouse_delta.angle_between(Vec2::from_angle(PI));
-        if angle.is_finite() {
-            self.last_d_mouse_angle = angle;
-            angle
-        } else {
-            self.last_d_mouse_angle
-        }
-    }
-    /// Displays fluid onto the screen
-    pub fn display<const C: usize>(&self, flow_box: &FlowBox<C>) {
-        let dim = flow_box.dim;
-
-        let block_size = (screen_width() / dim.0 as f32).min(screen_height() / dim.1 as f32);
-
-        for x in 0..dim.0 {
-            let screen_x = x as f32 * block_size;
-            for y in 0..dim.1 {
-                let screen_y = y as f32 * block_size;
-
-                let i = FlowBox::<C>::index(&x, &y, &dim);
-
-                // Getting the correct color depending on display mode
-                let color = match self.mode {
-                    DisplayMode::DensityColor => Color {
-                        r: flow_box.density.r[i],
-                        g: flow_box.density.g[i],
-                        b: flow_box.density.b[i],
-                        a: 1.0,
-                    },
-                    DisplayMode::DensityBlackWhite => {
-                        let avg = ((flow_box.density.r[i]
-                            + flow_box.density.g[i]
-                            + flow_box.density.b[i])
-                            / 3.0) as f32;
-                        Color {
-                            r: avg,
-                            g: avg,
-                            b: avg,
-                            a: 1.0,
-                        }
-                    }
-                    DisplayMode::VelocityBlackWhite => {
-                        let vx = flow_box.vel_x[i].clamp(-100.0, 100.0) as f32;
-                        let vy = flow_box.vel_y[i].clamp(-100.0, 100.0) as f32;
-                        let mag = Vec2::new(vx, vy).length_squared();
-                        Color {
-                            r: mag,
-                            g: mag,
-                            b: mag,
-                            a: 1.0,
-                        }
-                    }
-                };
-
-                draw_rectangle(screen_x, screen_y, block_size, block_size, color);
-            }
-        }
-        if self.flags & flags::DISPLAY_FPS != 0 {
-            draw_text(&format!("FPS: {}", get_fps()), 20.0, 20.0, 30.0, WHITE);
-        }
+    #[repr(C)]
+    pub struct Uniforms {
+        pub sim_dim: glam::IVec2,
     }
 }
