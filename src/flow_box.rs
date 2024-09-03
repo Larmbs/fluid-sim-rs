@@ -1,5 +1,4 @@
 //! Defines fluid simulation logic
-use macroquad::color::Color;
 use rayon::prelude::*;
 
 /// Represents the color density of fluid box particles
@@ -78,15 +77,15 @@ impl<const C: usize> FlowBox<C> {
     }
 
     /* Interacting with Fluids */
-    pub fn add_fluid_density(&mut self, x: usize, y: usize, color: Color) {
+    pub fn add_fluid_density(&mut self, x: usize, y: usize, color: [f32; 4]) {
         let i = Self::index(
             &x.clamp(0, self.dim.0 - 1),
             &y.clamp(0, self.dim.1 - 1),
             &self.dim,
         );
-        self.density.r[i] += color.r;
-        self.density.g[i] += color.g;
-        self.density.b[i] += color.b;
+        self.density.r[i] += color[0];
+        self.density.g[i] += color[1];
+        self.density.b[i] += color[2];
     }
     pub fn add_fluid_velocity(&mut self, x: usize, y: usize, vx: f32, vy: f32) {
         let i = Self::index(
@@ -223,10 +222,6 @@ impl<const C: usize> FlowBox<C> {
     fn set_bound(bound: &Bound, vals: &mut [f32], dim: &(usize, usize)) {
         // Deals with the top and bottom boundaries
         let vals_clone = vals.to_vec();
-        // let (row1, rest) = vals.split_at_mut(dim.0);
-        // let (_, row_last) = rest.split_at_mut(rest.len() - dim.0);
-
-        // row1.par_iter_mut().zip(row_last.par_iter_mut())
         let dir = if bound == &Bound::X { -1.0 } else { 1.0 };
         for x in 1..dim.0 - 1 {
             vals[Self::index(&x, &0, dim)] = dir * vals_clone[Self::index(&x, &1, dim)];

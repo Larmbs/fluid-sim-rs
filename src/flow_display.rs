@@ -28,20 +28,6 @@ lazy_static! {
     ];
 }
 
-// /// Linear interpolates between two colors s 0.0-1.0
-// fn lerp_colors(color1: &Color, color2: &Color, s: f32) -> Color {
-//     Color::from_vec(color1.to_vec().lerp(color2.to_vec(), s))
-// }
-
-// /// Linear interpolates between three colors s 0.0-2.0
-// fn lerp_3_colors(color1: &Color, color2: &Color, color3: &Color, s: f32) -> Color {
-//     match s {
-//         0.0..=1.0 => lerp_colors(color1, color2, s),
-//         1.0..=2.0 => lerp_colors(color2, color3, s - 1.0),
-//         _ => *color3,
-//     }
-// }
-
 /// Displays a FlowBox
 pub struct FlowDisplay {
     mode: DisplayMode,
@@ -65,29 +51,23 @@ impl FlowDisplay {
         self.flags = flags;
     }
     /// Returns the FlowBox grid coords of mouse
-    pub fn get_mouse_cord<const C: usize>(&self, flow_box: &FlowBox<C>) -> (usize, usize) {
-        let dim = flow_box.dim;
+    pub fn get_mouse_cord(&self, dim: &(usize, usize)) -> (usize, usize) {
         let block_size = (screen_width() / dim.0 as f32).min(screen_height() / dim.1 as f32);
-
-        let mouse_pos = mouse_position();
-        let x = (mouse_pos.0 / block_size) as usize;
-        let y = (mouse_pos.1 / block_size) as usize;
-
-        let clamped_x = x.clamp(0, dim.0);
-        let clamped_y = y.clamp(0, dim.1);
-
-        (clamped_x, clamped_y)
+        let mouse_pos: Vec2 = mouse_position().into();
+        let pos = mouse_pos / block_size;
+        (
+            (pos.x as usize).clamp(0, dim.0),
+            (pos.y as usize).clamp(0, dim.1),
+        )
     }
     /// Returns the last direction mouse was moving in the window
-    pub fn get_mouse_delta_angle(&mut self) -> f32 {
-        let mouse_delta = mouse_delta_position();
-        let angle = -mouse_delta.angle_between(Vec2::from_angle(PI));
-        if angle.is_finite() {
-            self.last_d_mouse_angle = angle;
-            angle
-        } else {
-            self.last_d_mouse_angle
-        }
+    pub fn get_mouse_mov_dir(&mut self) -> f32 {
+        let angle = -mouse_delta_position().angle_between(Vec2::from_angle(PI));
+        if !angle.is_finite() {
+            return self.last_d_mouse_angle;
+        };
+        self.last_d_mouse_angle = angle;
+        angle
     }
     /// Displays fluid onto the screen
     pub fn display<const C: usize>(&self, flow_box: &FlowBox<C>) {
@@ -95,49 +75,39 @@ impl FlowDisplay {
 
         let block_size = (screen_width() / dim.0 as f32).min(screen_height() / dim.1 as f32);
 
-        for x in 0..dim.0 {
-            let screen_x = x as f32 * block_size;
-            for y in 0..dim.1 {
-                let screen_y = y as f32 * block_size;
+        (0..dim.0 * dim.1).into_iter().for_each(|i| {
+            let (x, y) = FlowBox::<C>::pos(&i, &dim);
 
-                let i = FlowBox::<C>::index(&x, &y, &dim);
+            // Getting the correct color depending on display mode
+            let color = match self.mode {
+                DisplayMode::DensityColor => Color::new(
+                    flow_box.density.r[i],
+                    flow_box.density.g[i],
+                    flow_box.density.b[i],
+                    1.0,
+                ),
+                DisplayMode::DensityBlackWhite => {
+                    let avg =
+                        (flow_box.density.r[i] + flow_box.density.g[i] + flow_box.density.b[i])
+                            / 3.0;
+                    Color::new(avg, avg, avg, 1.0)
+                }
+                DisplayMode::VelocityBlackWhite => {
+                    let vx = flow_box.vel_x[i].clamp(-100.0, 100.0) as f32;
+                    let vy = flow_box.vel_y[i].clamp(-100.0, 100.0) as f32;
+                    let m = Vec2::new(vx, vy).length_squared();
+                    Color::new(m, m, m, 1.0)
+                }
+            };
 
-                // Getting the correct color depending on display mode
-                let color = match self.mode {
-                    DisplayMode::DensityColor => Color {
-                        r: flow_box.density.r[i],
-                        g: flow_box.density.g[i],
-                        b: flow_box.density.b[i],
-                        a: 1.0,
-                    },
-                    DisplayMode::DensityBlackWhite => {
-                        let avg = ((flow_box.density.r[i]
-                            + flow_box.density.g[i]
-                            + flow_box.density.b[i])
-                            / 3.0) as f32;
-                        Color {
-                            r: avg,
-                            g: avg,
-                            b: avg,
-                            a: 1.0,
-                        }
-                    }
-                    DisplayMode::VelocityBlackWhite => {
-                        let vx = flow_box.vel_x[i].clamp(-100.0, 100.0) as f32;
-                        let vy = flow_box.vel_y[i].clamp(-100.0, 100.0) as f32;
-                        let mag = Vec2::new(vx, vy).length_squared();
-                        Color {
-                            r: mag,
-                            g: mag,
-                            b: mag,
-                            a: 1.0,
-                        }
-                    }
-                };
-
-                draw_rectangle(screen_x, screen_y, block_size, block_size, color);
-            }
-        }
+            draw_rectangle(
+                x as f32 * block_size,
+                y as f32 * block_size,
+                block_size,
+                block_size,
+                color,
+            );
+        });
         if self.flags & flags::DISPLAY_FPS != 0 {
             draw_text(&format!("FPS: {}", get_fps()), 20.0, 20.0, 30.0, WHITE);
         }
