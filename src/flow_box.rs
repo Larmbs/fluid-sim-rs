@@ -25,6 +25,7 @@ impl Default for FluidParams {
 
 /// Represents what type of operation is being used on elements
 #[derive(PartialEq, Eq)]
+#[repr(u8)]
 enum Bound {
     Neither,
     X,

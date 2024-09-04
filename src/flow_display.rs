@@ -7,6 +7,7 @@ use lazy_static::lazy_static;
 use macroquad::prelude::*;
 
 /// Different viewing modes for FlowBox
+#[repr(u8)]
 pub enum DisplayMode {
     DensityBlackWhite,
     DensityColor,
