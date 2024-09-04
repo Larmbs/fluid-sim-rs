@@ -3,7 +3,7 @@
 ![](Example1.png "Fluid Sim")
 ![](Example2.png "Fluid Sim")
 
-Make sure you use --release for best performance:
+Make sure you use --release for best performance: you get a ~100% improvement instantly.
 ```
 cargo run --release
 ```
