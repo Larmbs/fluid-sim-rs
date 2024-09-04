@@ -65,7 +65,9 @@ impl FlowDisplay {
     /// Returns the last direction mouse was moving in the window
     pub fn get_mouse_mov_dir(&mut self) -> f32 {
         let delta = mouse_delta_position();
-        if delta.length_squared() < 0.00001 {return self.last_d_mouse_angle;};
+        if delta.length_squared() < 0.00001 {
+            return self.last_d_mouse_angle;
+        };
         let angle = -mouse_delta_position().angle_between(Vec2::from_angle(PI));
         if !angle.is_finite() {
             return self.last_d_mouse_angle;
@@ -75,7 +77,10 @@ impl FlowDisplay {
     }
     pub fn get_block_size(&self, dim: &(usize, usize)) -> (f32, f32) {
         if self.flags & flags::FILL_SCREEN != 0 {
-            (screen_width() / dim.0 as f32, screen_height() / dim.1 as f32)
+            (
+                screen_width() / dim.0 as f32,
+                screen_height() / dim.1 as f32,
+            )
         } else {
             let block_size = (screen_width() / dim.0 as f32).min(screen_height() / dim.1 as f32);
             (block_size, block_size)
@@ -100,7 +105,7 @@ impl FlowDisplay {
                 ),
                 DisplayMode::DensityBlackWhite => {
                     let avg =
-                        (flow_box.density[i].x +flow_box.density[i].y + flow_box.density[i].z)
+                        (flow_box.density[i].x + flow_box.density[i].y + flow_box.density[i].z)
                             / 3.0;
                     Color::new(avg, avg, avg, 1.0)
                 }

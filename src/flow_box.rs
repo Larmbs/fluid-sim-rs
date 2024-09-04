@@ -11,6 +11,7 @@ pub struct FluidParams {
     pub diffusion_rate: f32,
     pub diffuse_iters: usize,
     pub project_iters: usize,
+    pub gravity: f32,
 }
 impl Default for FluidParams {
     fn default() -> Self {
@@ -19,6 +20,33 @@ impl Default for FluidParams {
             diffusion_rate: 0.00005,
             diffuse_iters: 3,
             project_iters: 4,
+            gravity: -9.8,
+        }
+    }
+}
+/// Different boundary types for a fluid
+pub enum BoundaryType {
+    // Inlet boundary: allows an inflow of fluid
+    INLET(f32),
+    // Outlet boundary: allows fluid out
+    OUTLET,
+    // Solid boundary: acts as walls constraining flow
+    SOLID,
+}
+/// Outlines boundary behavior within sim
+pub struct BoundaryParams {
+    pub top: BoundaryType,
+    pub bottom: BoundaryType,
+    pub left: BoundaryType,
+    pub right: BoundaryType,
+}
+impl Default for BoundaryParams {
+    fn default() -> Self {
+        Self {
+            top: BoundaryType::SOLID,
+            bottom: BoundaryType::SOLID,
+            left: BoundaryType::INLET(10.0),
+            right: BoundaryType::OUTLET,
         }
     }
 }
@@ -45,22 +73,34 @@ pub struct FlowBox {
     density0: Vec<Vec3>,
 
     fluid_params: FluidParams,
+    boundary_params: BoundaryParams,
 }
 impl FlowBox {
     /* Initializing */
     pub fn init(width: usize, height: usize) -> Self {
-        FlowBox::init_with_params(width, height, FluidParams::default())
+        FlowBox::init_with_params(
+            width,
+            height,
+            FluidParams::default(),
+            BoundaryParams::default(),
+        )
     }
-    pub fn init_with_params(width: usize, height: usize, fluid_params: FluidParams) -> Self {
+    pub fn init_with_params(
+        width: usize,
+        height: usize,
+        fluid_params: FluidParams,
+        boundary_params: BoundaryParams,
+    ) -> Self {
         FlowBox {
             dim: (width, height),
-            vel_x: vec![0.0; width*height],
-            vel_x0: vec![0.0; width*height],
-            vel_y: vec![0.0; width*height],
-            vel_y0: vec![0.0; width*height],
-            density: vec![Vec3::ZERO; width*height],
-            density0: vec![Vec3::ZERO; width*height],
+            vel_x: vec![0.0; width * height],
+            vel_x0: vec![0.0; width * height],
+            vel_y: vec![0.0; width * height],
+            vel_y0: vec![0.0; width * height],
+            density: vec![Vec3::ZERO; width * height],
+            density0: vec![Vec3::ZERO; width * height],
             fluid_params,
+            boundary_params,
         }
     }
 
@@ -90,6 +130,8 @@ impl FlowBox {
     }
 
     pub fn step(&mut self, dt: f32) {
+        self.apply_boundary_conditions(dt);
+
         Self::diffuse(
             &Bound::X,
             &mut self.vel_x0,
@@ -164,9 +206,68 @@ impl FlowBox {
             &self.dim,
         );
     }
+    fn apply_boundary_conditions(&mut self, dt: f32) {
+        match self.boundary_params.top {
+            BoundaryType::INLET(speed) => {
+                for x in 1..self.dim.0 - 1 {
+                    self.vel_y[Self::index(&x, &1, &self.dim)] = speed * dt;
+                }
+            }
+            BoundaryType::OUTLET => {
+                for x in 1..self.dim.0 - 1 {
+                    self.vel_y[Self::index(&x, &1, &self.dim)] = 0.0;
+                }
+            }
+            BoundaryType::SOLID => (),
+        }
 
+        match self.boundary_params.bottom {
+            BoundaryType::INLET(speed) => {
+                for x in 1..self.dim.0 - 1 {
+                    self.vel_y[Self::index(&x, &(self.dim.1 - 2), &self.dim)] = -speed * dt;
+                }
+            }
+            BoundaryType::OUTLET => {
+                for x in 1..self.dim.0 - 1 {
+                    self.vel_y[Self::index(&x, &(self.dim.1 - 2), &self.dim)] = 0.0;
+                }
+            }
+            BoundaryType::SOLID => (),
+        }
+
+        match self.boundary_params.left {
+            BoundaryType::INLET(speed) => {
+                for y in 1..self.dim.1 - 1 {
+                    self.vel_x[Self::index(&1, &y, &self.dim)] = speed * dt;
+                }
+            }
+            BoundaryType::OUTLET => {
+                for y in 1..self.dim.1 - 1 {
+                    self.vel_x[Self::index(&1, &y, &self.dim)] = 0.0;
+                }
+            }
+            BoundaryType::SOLID => (),
+        }
+
+        match self.boundary_params.right {
+            BoundaryType::INLET(speed) => {
+                for y in 1..self.dim.1 - 1 {
+                    self.vel_x[Self::index(&(self.dim.0 - 2), &y, &self.dim)] = -speed * dt;
+                }
+            }
+            BoundaryType::OUTLET => {
+                for y in 1..self.dim.1 - 1 {
+                    self.vel_x[Self::index(&(self.dim.0 - 2), &y, &self.dim)] = 0.0;
+                }
+            }
+            BoundaryType::SOLID => (),
+        }
+
+        Self::set_bound(&Bound::X, &mut self.vel_x, &self.dim);
+        Self::set_bound(&Bound::Y, &mut self.vel_y, &self.dim);
+    }
     // Handles boundary conditions of the sim
-    fn set_bound<T>(bound: &Bound, vals: &mut [T], dim: &(usize, usize))
+    fn set_bound<T>(b: &Bound, vals: &mut [T], dim: &(usize, usize))
     where
         T: Copy
             + Add<Output = T>
@@ -179,7 +280,8 @@ impl FlowBox {
     {
         // Deals with the top and bottom boundaries
         let vals_clone = vals.to_vec();
-        let dir = if bound == &Bound::X { -1.0 } else { 1.0 };
+        let dir = if b == &Bound::X { -1.0 } else { 1.0 };
+
         for x in 1..dim.0 - 1 {
             vals[Self::index(&x, &0, dim)] = vals_clone[Self::index(&x, &1, dim)].mul(dir);
             vals[Self::index(&x, &(dim.1 - 1), dim)] =
@@ -187,7 +289,7 @@ impl FlowBox {
         }
 
         // Deals with the side boundaries
-        let dir = if bound == &Bound::Y { -1.0 } else { 1.0 };
+        let dir = if b == &Bound::Y { -1.0 } else { 1.0 };
         for y in 1..dim.1 - 1 {
             vals[Self::index(&0, &y, dim)] = vals_clone[Self::index(&1, &y, dim)].mul(dir);
             vals[Self::index(&(dim.0 - 1), &y, dim)] =
@@ -220,14 +322,15 @@ impl FlowBox {
         iters: usize,
         dim: &(usize, usize),
     ) where
-    T: Copy
-        + Add<Output = T>
-        + Sub<Output = T>
-        + Mul<Output = T>
-        + Mul<f32, Output = T>
-        + Div<Output = T>
-        + Send
-        + Sync, {
+        T: Copy
+            + Add<Output = T>
+            + Sub<Output = T>
+            + Mul<Output = T>
+            + Mul<f32, Output = T>
+            + Div<Output = T>
+            + Send
+            + Sync,
+    {
         let c_recip = 1.0 / c;
 
         for _ in 0..iters {
@@ -240,7 +343,8 @@ impl FlowBox {
                         + (clone_vals[Self::index(&(x + 1), &y, dim)]
                             + clone_vals[Self::index(&(x - 1), &y, dim)]
                             + clone_vals[Self::index(&x, &(y + 1), dim)]
-                            + clone_vals[Self::index(&x, &(y - 1), dim)]).mul(a))
+                            + clone_vals[Self::index(&x, &(y - 1), dim)])
+                        .mul(a))
                         * c_recip;
                 }
             });
@@ -258,14 +362,15 @@ impl FlowBox {
         iters: usize,
         dim: &(usize, usize),
     ) where
-    T: Copy
-        + Add<Output = T>
-        + Sub<Output = T>
-        + Mul<Output = T>
-        + Mul<f32, Output = T>
-        + Div<Output = T>
-        + Send
-        + Sync, {
+        T: Copy
+            + Add<Output = T>
+            + Sub<Output = T>
+            + Mul<Output = T>
+            + Mul<f32, Output = T>
+            + Div<Output = T>
+            + Send
+            + Sync,
+    {
         let a = dt * diff * 10000.0;
         Self::lin_solve(b, vals, vals0, a, 1.0 + 4.0 * a, iters, dim);
     }

@@ -6,13 +6,16 @@ use fluid_sim_rs::{
 use macroquad::{color::hsl_to_rgb, prelude::*};
 
 const WIDTH: usize = 200;
-const HEIGHT: usize = 75;
+const HEIGHT: usize = 100;
 
 #[macroquad::main("Fluid Sim")]
 async fn main() {
     let mut flow_box = FlowBox::init(WIDTH, HEIGHT);
 
-    let mut flow_display = FlowDisplay::init(DisplayMode::DensityColor, flags::FILL_SCREEN | flags::DISPLAY_FPS);
+    let mut flow_display = FlowDisplay::init(
+        DisplayMode::DensityColor,
+        flags::FILL_SCREEN | flags::DISPLAY_FPS,
+    );
 
     let mut iter: u128 = 0;
     loop {
