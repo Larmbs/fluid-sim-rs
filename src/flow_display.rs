@@ -19,6 +19,7 @@ pub mod flags {
     pub const NONE: u8 = 0b0000;
     pub const SHOW_VELOCITY_VECTORS: u8 = 0b0001;
     pub const DISPLAY_FPS: u8 = 0b0010;
+    pub const FILL_SCREEN: u8 = 0b0100;
 }
 
 lazy_static! {
@@ -53,9 +54,9 @@ impl FlowDisplay {
     }
     /// Returns the FlowBox grid coords of mouse
     pub fn get_mouse_cord(&self, dim: &(usize, usize)) -> (usize, usize) {
-        let block_size = (screen_width() / dim.0 as f32).min(screen_height() / dim.1 as f32);
+        let (block_size_x, block_size_y) = self.get_block_size(&dim);
         let mouse_pos: Vec2 = mouse_position().into();
-        let pos = mouse_pos / block_size;
+        let pos = mouse_pos / Vec2::new(block_size_x, block_size_y);
         (
             (pos.x as usize).clamp(0, dim.0),
             (pos.y as usize).clamp(0, dim.1),
@@ -63,6 +64,8 @@ impl FlowDisplay {
     }
     /// Returns the last direction mouse was moving in the window
     pub fn get_mouse_mov_dir(&mut self) -> f32 {
+        let delta = mouse_delta_position();
+        if delta.length_squared() < 0.00001 {return self.last_d_mouse_angle;};
         let angle = -mouse_delta_position().angle_between(Vec2::from_angle(PI));
         if !angle.is_finite() {
             return self.last_d_mouse_angle;
@@ -70,14 +73,22 @@ impl FlowDisplay {
         self.last_d_mouse_angle = angle;
         angle
     }
+    pub fn get_block_size(&self, dim: &(usize, usize)) -> (f32, f32) {
+        if self.flags & flags::FILL_SCREEN != 0 {
+            (screen_width() / dim.0 as f32, screen_height() / dim.1 as f32)
+        } else {
+            let block_size = (screen_width() / dim.0 as f32).min(screen_height() / dim.1 as f32);
+            (block_size, block_size)
+        }
+    }
     /// Displays fluid onto the screen
-    pub fn display<const C: usize>(&self, flow_box: &FlowBox<C>) {
+    pub fn display(&self, flow_box: &FlowBox) {
         let dim = flow_box.dim;
 
-        let block_size = (screen_width() / dim.0 as f32).min(screen_height() / dim.1 as f32);
+        let (block_size_x, block_size_y) = self.get_block_size(&dim);
 
         (0..dim.0 * dim.1).into_iter().for_each(|i| {
-            let (x, y) = FlowBox::<C>::pos(&i, &dim);
+            let (x, y) = FlowBox::pos(&i, &dim);
 
             // Getting the correct color depending on display mode
             let color = match self.mode {
@@ -102,10 +113,10 @@ impl FlowDisplay {
             };
 
             draw_rectangle(
-                x as f32 * block_size,
-                y as f32 * block_size,
-                block_size,
-                block_size,
+                x as f32 * block_size_x,
+                y as f32 * block_size_y,
+                block_size_x,
+                block_size_y,
                 color,
             );
         });

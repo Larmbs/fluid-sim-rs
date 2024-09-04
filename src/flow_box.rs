@@ -33,20 +33,20 @@ enum Bound {
 }
 
 /// A box which holds a gird of fluid velocity vectors
-pub struct FlowBox<const C: usize> {
+pub struct FlowBox {
     pub dim: (usize, usize),
 
-    pub vel_x: [f32; C],
-    vel_x0: [f32; C],
-    pub vel_y: [f32; C],
-    vel_y0: [f32; C],
+    pub vel_x: Vec<f32>,
+    vel_x0: Vec<f32>,
+    pub vel_y: Vec<f32>,
+    vel_y0: Vec<f32>,
 
-    pub density: [Vec3; C],
-    density0: [Vec3; C],
+    pub density: Vec<Vec3>,
+    density0: Vec<Vec3>,
 
     fluid_params: FluidParams,
 }
-impl<const C: usize> FlowBox<C> {
+impl FlowBox {
     /* Initializing */
     pub fn init(width: usize, height: usize) -> Self {
         FlowBox::init_with_params(width, height, FluidParams::default())
@@ -54,12 +54,12 @@ impl<const C: usize> FlowBox<C> {
     pub fn init_with_params(width: usize, height: usize, fluid_params: FluidParams) -> Self {
         FlowBox {
             dim: (width, height),
-            vel_x: [0.0; C],
-            vel_x0: [0.0; C],
-            vel_y: [0.0; C],
-            vel_y0: [0.0; C],
-            density: [Vec3::ZERO; C],
-            density0: [Vec3::ZERO; C],
+            vel_x: vec![0.0; width*height],
+            vel_x0: vec![0.0; width*height],
+            vel_y: vec![0.0; width*height],
+            vel_y0: vec![0.0; width*height],
+            density: vec![Vec3::ZERO; width*height],
+            density0: vec![Vec3::ZERO; width*height],
             fluid_params,
         }
     }
