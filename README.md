@@ -34,6 +34,6 @@ These three rules are crucial to the behavior of a fluid.
 ## Sources
  - https://matthias-research.github.io/pages/tenMinutePhysics/17-fluidSim.pdf
  - https://www.mikeash.com/pyblog/fluid-simulation-for-dummies.html
- - Wikipedia: Euler_equations_(fluid_dynamics) https://en.wikipedia.org/wiki/Euler_equations_(fluid_dynamics)
- - Wikipedia: Smoothed-particle_hydrodynamics https://en.wikipedia.org/wiki/Smoothed-particle_hydrodynamics
+ - https://en.wikipedia.org/wiki/Euler_equations_(fluid_dynamics)
+ - https://en.wikipedia.org/wiki/Smoothed-particle_hydrodynamics
  
