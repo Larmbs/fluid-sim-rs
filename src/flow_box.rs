@@ -46,8 +46,8 @@ impl Default for BoundaryParams {
         Self {
             top: BoundaryType::SOLID,
             bottom: BoundaryType::SOLID,
-            left: BoundaryType::INLET(10.0, true),
-            right: BoundaryType::OUTLET,
+            left: BoundaryType::SOLID,
+            right: BoundaryType::SOLID,
         }
     }
 }
