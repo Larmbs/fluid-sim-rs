@@ -19,15 +19,16 @@ impl Default for FluidParams {
             viscosity: 0.00005,
             diffusion_rate: 0.00005,
             diffuse_iters: 3,
-            project_iters: 4,
+            project_iters: 5,
             gravity: -9.8,
         }
     }
 }
+
 /// Different boundary types for a fluid
 pub enum BoundaryType {
-    // Inlet boundary: allows an inflow of fluid
-    INLET(f32),
+    // Inlet boundary: allows an inflow of fluid and gives the option to add in fluid density
+    INLET(f32, bool),
     // Outlet boundary: allows fluid out
     OUTLET,
     // Solid boundary: acts as walls constraining flow
@@ -45,7 +46,7 @@ impl Default for BoundaryParams {
         Self {
             top: BoundaryType::SOLID,
             bottom: BoundaryType::SOLID,
-            left: BoundaryType::INLET(10.0),
+            left: BoundaryType::INLET(10.0, true),
             right: BoundaryType::OUTLET,
         }
     }
@@ -208,9 +209,12 @@ impl FlowBox {
     }
     fn apply_boundary_conditions(&mut self, dt: f32) {
         match self.boundary_params.top {
-            BoundaryType::INLET(speed) => {
+            BoundaryType::INLET(speed, add_density) => {
                 for x in 1..self.dim.0 - 1 {
                     self.vel_y[Self::index(&x, &1, &self.dim)] = speed * dt;
+                }
+                if add_density {
+                    self.add_fluid_density(self.dim.0 / 2, 1, [1.0, 0.0, 0.0, 0.0])
                 }
             }
             BoundaryType::OUTLET => {
@@ -222,9 +226,12 @@ impl FlowBox {
         }
 
         match self.boundary_params.bottom {
-            BoundaryType::INLET(speed) => {
+            BoundaryType::INLET(speed, add_density) => {
                 for x in 1..self.dim.0 - 1 {
                     self.vel_y[Self::index(&x, &(self.dim.1 - 2), &self.dim)] = -speed * dt;
+                }
+                if add_density {
+                    self.add_fluid_density(self.dim.0 / 2, self.dim.1 - 2, [1.0, 0.0, 0.0, 0.0])
                 }
             }
             BoundaryType::OUTLET => {
@@ -236,9 +243,12 @@ impl FlowBox {
         }
 
         match self.boundary_params.left {
-            BoundaryType::INLET(speed) => {
+            BoundaryType::INLET(speed, add_density) => {
                 for y in 1..self.dim.1 - 1 {
                     self.vel_x[Self::index(&1, &y, &self.dim)] = speed * dt;
+                }
+                if add_density {
+                    self.add_fluid_density(1, self.dim.1 / 2, [1.0, 0.0, 0.0, 0.0])
                 }
             }
             BoundaryType::OUTLET => {
@@ -250,9 +260,12 @@ impl FlowBox {
         }
 
         match self.boundary_params.right {
-            BoundaryType::INLET(speed) => {
+            BoundaryType::INLET(speed, add_density) => {
                 for y in 1..self.dim.1 - 1 {
                     self.vel_x[Self::index(&(self.dim.0 - 2), &y, &self.dim)] = -speed * dt;
+                }
+                if add_density {
+                    self.add_fluid_density(self.dim.0 - 2, self.dim.1 / 2, [1.0, 0.0, 0.0, 0.0])
                 }
             }
             BoundaryType::OUTLET => {
@@ -331,7 +344,7 @@ impl FlowBox {
             + Send
             + Sync,
     {
-        let c_recip = 1.0 / c;
+        let c_recip = c.recip();
 
         for _ in 0..iters {
             let clone_vals = vals.to_vec();
@@ -348,7 +361,6 @@ impl FlowBox {
                         * c_recip;
                 }
             });
-
             Self::set_bound(bound, vals, dim);
         }
     }
@@ -444,6 +456,8 @@ impl FlowBox {
         let dtx = dt * 100.0;
         let dty = dt * 100.0;
 
+        let l = vals0.len() - 1;
+
         vals.par_iter_mut().enumerate().for_each(|(ix, v)| {
             let (i, j) = Self::pos(&ix, dim);
 
@@ -476,21 +490,22 @@ impl FlowBox {
             let j0i = j0 as usize;
             let j1i = j1 as usize;
 
-            *v = (vals0[Self::index(&i0i, &j0i, dim).clamp(0, dim.0 * dim.1 - 1)].mul(t0)
-                + vals0[Self::index(&i0i, &j1i, dim).clamp(0, dim.0 * dim.1 - 1)].mul(t1))
+            *v = (vals0[Self::index(&i0i, &j0i, dim).clamp(0, l)].mul(t0)
+                + vals0[Self::index(&i0i, &j1i, dim).clamp(0, l)].mul(t1))
             .mul(s0)
-                + (vals0[Self::index(&i1i, &j0i, dim).clamp(0, dim.0 * dim.1 - 1)].mul(t0)
-                    + vals0[Self::index(&i1i, &j1i, dim).clamp(0, dim.0 * dim.1 - 1)].mul(t1))
+                + (vals0[Self::index(&i1i, &j0i, dim).clamp(0, l)].mul(t0)
+                    + vals0[Self::index(&i1i, &j1i, dim).clamp(0, l)].mul(t1))
                 .mul(s1);
         });
 
         Self::set_bound(bound, vals, dim);
     }
-    // Returns index value for grid coord
+    // Returns index value for the x, y position
     #[inline]
     pub fn index(x: &usize, y: &usize, dim: &(usize, usize)) -> usize {
         x + y * dim.0
     }
+    // Returns the x, y position given the index
     #[inline]
     pub fn pos(i: &usize, dim: &(usize, usize)) -> (usize, usize) {
         (i % dim.0, i / dim.0)

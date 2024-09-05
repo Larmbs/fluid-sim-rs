@@ -5,8 +5,8 @@ use fluid_sim_rs::{
 
 use macroquad::{color::hsl_to_rgb, prelude::*};
 
-const WIDTH: usize = 200;
-const HEIGHT: usize = 100;
+const WIDTH: usize = 100;
+const HEIGHT: usize = 50;
 
 #[macroquad::main("Fluid Sim")]
 async fn main() {
@@ -22,7 +22,7 @@ async fn main() {
         let pos = flow_display.get_mouse_cord(&flow_box.dim);
         let angle = flow_display.get_mouse_mov_dir();
 
-        flow_box.add_fluid_velocity_angle_mag(pos.0, pos.1, angle, 90000.0);
+        flow_box.add_fluid_velocity_angle_mag(pos.0, pos.1, angle, 10000.0);
         flow_box.add_fluid_density(
             pos.0,
             pos.1,
